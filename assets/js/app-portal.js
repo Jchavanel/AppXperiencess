@@ -156,7 +156,7 @@ function renderCompanyAdmin(){
                 : `Te quedan <strong>${daysLeft} días</strong>. Al terminar, pasarás al plan gratuito sin comisión fija (25%).`
               }
             </span>
-            <a href="mailto:hola@xperiences.es?subject=Contratar plan" class="trial-banner-cta">Ver planes</a>
+            <a href="#" class="trial-banner-cta" id="btn-ver-planes">Ver planes</a>
           </div>`);
         }
         // ── Banner trial expirado (ya en basico_a) ───────────
@@ -167,7 +167,7 @@ function renderCompanyAdmin(){
               <strong>Tu período de prueba ha finalizado.</strong>
               Estás en el plan gratuito (25% comisión). Actualiza para recuperar push, analytics y más visibilidad.
             </span>
-            <a href="mailto:hola@xperiences.es?subject=Contratar plan" class="trial-banner-cta">Upgrade</a>
+            <a href="#" class="trial-banner-cta trial-banner-cta-upgrade" id="btn-ver-planes-upgrade">Upgrade</a>
           </div>`);
         }
         // ── Nota analytics ───────────────────────────────────
@@ -179,6 +179,12 @@ function renderCompanyAdmin(){
     </section>
     <section class="panel" id="company-bookings-panel"><div class="panel-head between"><h2>Reservas de tu empresa</h2></div><div class="xp-loading"><div class="xp-spinner"></div><p>Cargando reservas…</p></div></section>`
   ,'company');
+
+  // ── Listeners: Ver planes ──────────────────────────────────
+  ['btn-ver-planes','btn-ver-planes-upgrade'].forEach(id=>{
+    const btn=app.querySelector('#'+id);
+    if(btn) btn.addEventListener('click',e=>{e.preventDefault();renderPlanesModal(company);});
+  });
 
   // ── Mapa Leaflet ──────────────────────────────────────────
   let _map=null;let _marker=null;
@@ -384,6 +390,181 @@ function render(){
     app.innerHTML=`<div class="error-screen"><h1>Error</h1><p>${escapeHtml(err.message||String(err))}</p><button onclick="location.reload()">Reintentar</button> <a href="portal.html">Volver</a></div>`;
   }
 }
+
+// ══════════════════════════════════════════════════════════════
+//  Modal de comparativa de planes
+// ══════════════════════════════════════════════════════════════
+function renderPlanesModal(company){
+  // Quitar modal previo si existe
+  document.getElementById('xp-planes-modal')?.remove();
+
+  const limits = getPlanLimits(company);
+  const currentPlanKey = limits.planKey;
+  const daysLeft = getTrialDaysLeft(company);
+
+  // ── Datos de cada plan ──────────────────────────────────────
+  const planes = [
+    {
+      key: 'basico_b',
+      name: 'Básico',
+      price: '29,90',
+      period: '/ mes',
+      commission: '10%',
+      color: 'teal',
+      highlight: false,
+      features: [
+        { ok: true,  text: 'Ficha pública completa' },
+        { ok: true,  text: 'Fotos, mapa y experiencias ilimitadas' },
+        { ok: true,  text: 'Portal de gestión' },
+        { ok: true,  text: 'Nombre del cliente en reservas' },
+        { ok: false, text: 'Push notifications' },
+        { ok: false, text: 'Analytics de reservas' },
+        { ok: false, text: 'Teléfono y email del cliente' },
+        { ok: false, text: 'Envío de promos a tus clientes' },
+        { ok: false, text: 'Badge en el buscador' },
+      ],
+      cta: 'Elegir Básico',
+      note: 'Visibilidad búsqueda 3/10'
+    },
+    {
+      key: 'pro',
+      name: 'Pro',
+      price: '69,90',
+      period: '/ mes',
+      commission: '8%',
+      color: 'blue',
+      highlight: true,
+      features: [
+        { ok: true,  text: 'Todo lo del plan Básico' },
+        { ok: true,  text: 'Push — nueva reserva (inmediato)' },
+        { ok: true,  text: 'Push — confirmación al cliente' },
+        { ok: true,  text: 'Push — promos a tus clientes' },
+        { ok: true,  text: 'Analytics 90 días (reservas, búsquedas)' },
+        { ok: true,  text: 'Edad de clientes por rangos' },
+        { ok: true,  text: 'Teléfono y email del cliente' },
+        { ok: true,  text: 'Exportar reservas CSV' },
+        { ok: true,  text: 'Badge verificado en el buscador' },
+      ],
+      cta: 'Elegir Pro',
+      note: 'Visibilidad búsqueda 6/10'
+    },
+    {
+      key: 'infinity',
+      name: 'Infinity',
+      price: '119,90',
+      period: '/ mes',
+      commission: '5%',
+      color: 'amber',
+      highlight: false,
+      features: [
+        { ok: true,  text: 'Todo lo del plan Pro' },
+        { ok: true,  text: 'Analytics 365 días + métricas de sector' },
+        { ok: true,  text: 'Comparativa con negocios similares' },
+        { ok: true,  text: 'Estacionalidad y tendencias de tu actividad' },
+        { ok: true,  text: 'Incluida en promos globales de Xperiences' },
+        { ok: true,  text: 'Badge destacado (★) en el buscador' },
+        { ok: true,  text: 'Máxima prioridad en búsqueda' },
+        { ok: true,  text: 'Soporte directo prioritario' },
+        { ok: true,  text: 'Acceso anticipado a nuevas funciones' },
+      ],
+      cta: 'Elegir Infinity',
+      note: 'Visibilidad búsqueda 9/10'
+    }
+  ];
+
+  // ── Colores por plan ────────────────────────────────────────
+  const palettes = {
+    teal:  { bg:'rgba(29,158,117,.10)', border:'rgba(29,158,117,.30)', name:'rgba(100,220,180,.95)', price:'rgba(29,158,117,1)', btn:'rgba(29,158,117,.85)', btnHover:'rgba(29,158,117,1)' },
+    blue:  { bg:'rgba(55,138,221,.14)', border:'rgba(55,138,221,.45)', name:'rgba(120,190,255,.95)', price:'rgba(77,163,255,1)',  btn:'rgba(22,119,255,.9)',  btnHover:'rgba(22,119,255,1)' },
+    amber: { bg:'rgba(186,117,23,.10)', border:'rgba(239,159,39,.30)', name:'rgba(240,185,80,.95)', price:'rgba(239,159,39,1)',  btn:'rgba(186,117,23,.85)', btnHover:'rgba(239,159,39,1)' }
+  };
+
+  // ── Punto de equilibrio dinámico ────────────────────────────
+  const breakEven = Math.round(29.90 / (0.25 - 0.10));
+
+  // ── HTML del modal ──────────────────────────────────────────
+  const cardsHtml = planes.map(p => {
+    const pal = palettes[p.color];
+    const isCurrent = p.key === currentPlanKey;
+    const featHtml = p.features.map(f =>
+      `<div class="xp-plan-feat ${f.ok?'on':'off'}">
+        <span class="xp-plan-dot ${f.ok?'dot-on':'dot-off'}"></span>
+        <span>${escapeHtml(f.text)}</span>
+      </div>`
+    ).join('');
+
+    return `
+    <div class="xp-plan-card ${p.highlight?'xp-plan-highlighted':''} ${isCurrent?'xp-plan-current':''}"
+         style="background:${pal.bg};border-color:${pal.border}">
+      ${p.highlight ? '<div class="xp-plan-popular-tag">Más elegido</div>' : ''}
+      ${isCurrent    ? '<div class="xp-plan-current-tag">Plan actual</div>' : ''}
+      <div class="xp-plan-name" style="color:${pal.name}">${p.name}</div>
+      <div class="xp-plan-price-row">
+        <span class="xp-plan-price" style="color:${pal.price}">${p.price}€</span>
+        <span class="xp-plan-period">${p.period}</span>
+      </div>
+      <div class="xp-plan-commission">+ ${p.commission} por reserva</div>
+      <div class="xp-plan-divider" style="background:${pal.border}"></div>
+      <div class="xp-plan-features">${featHtml}</div>
+      <div class="xp-plan-note">${escapeHtml(p.note)}</div>
+      ${!isCurrent ? `
+      <a href="mailto:hola@xperiences.es?subject=Contratar%20plan%20${encodeURIComponent(p.name)}"
+         class="xp-plan-cta" style="background:${pal.btn}" 
+         onmouseover="this.style.background='${pal.btnHover}'"
+         onmouseout="this.style.background='${pal.btn}'">${escapeHtml(p.cta)}</a>
+      ` : '<div class="xp-plan-cta-current">✓ Tu plan actual</div>'}
+    </div>`;
+  }).join('');
+
+  // Banner trial info dentro del modal
+  const trialBanner = (limits.isTrial && daysLeft > 0) ? `
+    <div class="xp-plans-trial-note">
+      🎁 Durante tu prueba tienes acceso completo (${daysLeft} días restantes). 
+      Elige el plan que mejor se adapte a tu negocio para cuando finalice.
+    </div>` : '';
+
+  const breakEvenNote = `
+    <div class="xp-plans-breakeven">
+      💡 <strong>Punto de equilibrio Básico vs sin cuota:</strong>
+      Con más de <strong>${breakEven}€/mes en reservas</strong>, el plan Básico 
+      (29,90€ + 10%) sale más barato que el plan gratuito (25% sin cuota).
+    </div>`;
+
+  const modalHtml = `
+  <div id="xp-planes-modal" class="xp-modal-overlay" role="dialog" aria-modal="true" aria-label="Comparativa de planes">
+    <div class="xp-modal-box xp-planes-box">
+      <div class="xp-modal-header">
+        <div>
+          <h2 class="xp-modal-title">Planes Xperiences</h2>
+          <p class="xp-modal-sub">Elige el plan que mejor encaje con tu negocio. Sin permanencia.</p>
+        </div>
+        <button class="xp-modal-close" id="xp-planes-close" aria-label="Cerrar">✕</button>
+      </div>
+      ${trialBanner}
+      <div class="xp-plans-grid">${cardsHtml}</div>
+      ${breakEvenNote}
+      <p class="xp-plans-footer-note">
+        Todos los planes incluyen ficha pública, foto, mapa y experiencias ilimitadas. 
+        Sin permanencia — cancela cuando quieras. 
+        <a href="mailto:hola@xperiences.es">¿Dudas? Escríbenos.</a>
+      </p>
+    </div>
+  </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+  // ── Cerrar modal ────────────────────────────────────────────
+  const overlay = document.getElementById('xp-planes-modal');
+  document.getElementById('xp-planes-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+  document.addEventListener('keydown', function onKey(e){
+    if(e.key === 'Escape'){ overlay.remove(); document.removeEventListener('keydown', onKey); }
+  });
+
+  // Animar entrada
+  requestAnimationFrame(() => overlay.classList.add('xp-modal-visible'));
+}
+
 
 // ── Arranque portal empresa ───────────────────────────────────
 async function initPortalApp(){
