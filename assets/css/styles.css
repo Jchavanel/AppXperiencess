@@ -735,7 +735,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
    ══════════════════════════════════════════════════════════════ */
 
 /* ── Safe-area: topbar adaptado a Dynamic Island / notch ── */
+/* FIX stacking context: position+z-index aseguran que el topbar y su dropdown
+   siempre floten sobre los paneles de .main (backdrop-filter ya crea stacking
+   context pero sin z-index explícito los paneles posteriores en DOM ganan). */
 .topbar {
+  position: relative;
+  z-index: 500;
   padding-top:    max(1rem, env(safe-area-inset-top));
   padding-left:   max(1.1rem, env(safe-area-inset-left));
   padding-right:  max(1.1rem, env(safe-area-inset-right));
@@ -791,23 +796,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 .admin-ham-menu {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  min-width: 220px;
-  background: rgba(8,22,44,.97);
-  border: 1px solid rgba(149,198,255,.22);
+  /* position:fixed escapa completamente de cualquier stacking context padre
+     (backdrop-filter, z-index, overflow) y siempre queda en primer plano.
+     La posición se actualiza via JS al abrir. */
+  position: fixed;
+  top: 0;         /* override via JS: style.top */
+  right: 1rem;    /* alineado al margen derecho */
+  min-width: 230px;
+  background: rgba(6,18,40,.98);
+  border: 1px solid rgba(149,198,255,.26);
   border-radius: 18px;
-  backdrop-filter: blur(20px);
-  box-shadow: 0 24px 56px rgba(2,12,28,.55);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow: 0 28px 64px rgba(2,12,28,.65), 0 0 0 1px rgba(255,255,255,.04) inset;
   padding: .5rem;
-  z-index: 9000;
+  z-index: 99999;
   /* Oculto por defecto */
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-8px) scale(.97);
+  transform: translateY(-10px) scale(.97);
   transform-origin: top right;
-  transition: opacity .18s ease, transform .18s ease;
+  transition: opacity .18s cubic-bezier(.16,1,.3,1), transform .18s cubic-bezier(.16,1,.3,1);
 }
 .admin-ham-menu.open {
   opacity: 1;
@@ -882,10 +891,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .nav-links-public {
     gap: .5rem;
   }
-  /* Menú hamburguesa en admin: asegurar que no se salga de la pantalla */
+  /* Menú hamburguesa en admin: position:fixed, se adapta solo */
   .admin-ham-menu {
-    right: max(0px, env(safe-area-inset-right));
-    max-width: calc(100vw - 2rem);
+    right: max(.75rem, env(safe-area-inset-right));
+    max-width: calc(100vw - 1.5rem);
   }
   /* Shell padding lateral usando safe-area */
   .shell {

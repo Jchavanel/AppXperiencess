@@ -805,6 +805,20 @@ const _SVG = {
     var btn=document.getElementById('admin-ham-btn');
     if(!m||!btn)return;
     var open=!m.classList.contains('open');
+    // Calcular posición fixed basada en el botón (antes de mostrar)
+    if(open){
+      var r=btn.getBoundingClientRect();
+      // Anclar el dropdown justo debajo del botón, alineado a su borde derecho
+      var menuRight=Math.max(8,window.innerWidth-r.right);
+      var menuTop=r.bottom+8;
+      // Asegurar que no se salga por abajo
+      var maxH=window.innerHeight-menuTop-12;
+      m.style.top=menuTop+'px';
+      m.style.right=menuRight+'px';
+      m.style.left='auto';
+      m.style.maxHeight=maxH>200?maxH+'px':'';
+      m.style.overflowY=maxH<300?'auto':'';
+    }
     m.classList.toggle('open',open);
     btn.setAttribute('aria-expanded',String(open));
     btn.innerHTML=open?_SVG.close:_SVG.menu;
