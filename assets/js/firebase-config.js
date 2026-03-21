@@ -1,18 +1,19 @@
 /**
- * Rellena este fichero con la configuración REAL de tu proyecto Firebase.
- *
- * Necesitas además:
- * - Firestore activo
- * - Authentication activo
- * - proveedor Email/Password habilitado
- *
- * Si dejas valores de ejemplo, el registro/login del cliente fallará.
+ * ╔══════════════════════════════════════════════════════════╗
+ * ║  PASO 1 DE 2 — Rellena tu configuración de Firebase      ║
+ * ║                                                          ║
+ * ║  Dónde encontrarla:                                      ║
+ * ║  Firebase Console → tu proyecto → ⚙️ Configuración      ║
+ * ║  → "Tu app web" → SDK setup → Config                    ║
+ * ║                                                          ║
+ * ║  Consulta DEPLOY.md para instrucciones completas         ║
+ * ╚══════════════════════════════════════════════════════════╝
  */
 window.XP_FIREBASE_CONFIG = {
-  apiKey:            "TU_API_KEY",
-  authDomain:        "tu-proyecto.firebaseapp.com",
-  projectId:         "tu-proyecto",
-  storageBucket:     "tu-proyecto.appspot.com",
-  messagingSenderId: "TU_SENDER_ID",
-  appId:             "TU_APP_ID"
+  apiKey:            "AIzaSyANQPli3jWc_FApWG11pqT7ztqjJw9lN_g",
+  authDomain:        "mrxperiences-f2534.firebaseapp.com",
+  projectId:         "mrxperiences-f2534",
+  storageBucket:     "mrxperiences-f2534.firebasestorage.app",
+  messagingSenderId: "288251563323",
+  appId:             "1:288251563323:web:b415ec410bfde65d497b1e"
 };
