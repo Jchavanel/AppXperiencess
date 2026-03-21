@@ -1,0 +1,8 @@
+# wrangler.toml — Cloudflare Workers Assets (sitio estático)
+name = "appxperiences"
+compatibility_date = "2024-01-01"
+
+[assets]
+directory = "."
+# Modo SPA: rutas sin archivo conocido → index.html (evita el bucle de _redirects)
+not_found_handling = "single-page-application"

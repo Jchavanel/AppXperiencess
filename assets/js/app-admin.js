@@ -195,10 +195,21 @@ function renderAdminCompanyDetail(companyId){
               <strong class="plan-name-display">${getPlanLimits(company).label}</strong>
               <span class="plan-commission-display">· comisión ${Math.round(getPlanLimits(company).commission*100)}%</span>
             </div>
-            <span class="plan-status-pill plan-status-${company.subscription?.status||'active'}">${{active:'Activo',trial:'Trial',overdue:'Con deuda',cancelled:'Cancelado'}[company.subscription?.status||'active']||'Activo'}</span>
+            ${(()=>{
+              const limits=getPlanLimits(company);
+              const daysLeft=getTrialDaysLeft(company);
+              const status=company.subscription?.status||'active';
+              const label={active:'Activo',trial:'Trial',overdue:'Con deuda',cancelled:'Cancelado'}[status]||'Activo';
+              const cls = limits.trialExpired ? 'plan-status-expired'
+                : daysLeft !== null && daysLeft <= 7 ? 'plan-status-trial-urgent'
+                : `plan-status-${status}`;
+              const extra = daysLeft !== null && daysLeft > 0 ? ` · ${daysLeft}d`
+                : limits.trialExpired ? ' · EXPIRADO' : '';
+              return `<span class="plan-status-pill ${cls}">${label}${extra}</span>`;
+            })()}
           </div>
           <div class="plan-meta">
-            ${company.subscription?.trialEndsAt?`<span>Trial hasta: <strong>${company.subscription.trialEndsAt}</strong></span>`:''} 
+            ${company.subscription?.trialEndsAt?`<span>Trial hasta: <strong>${company.subscription.trialEndsAt}</strong>${getTrialDaysLeft(company)===0?' <em style="color:#f87">— expirado</em>':''}</span>`:''} 
             ${company.subscription?.renewsAt?`<span>Renueva: <strong>${company.subscription.renewsAt}</strong></span>`:''}
             ${company.subscription?.stripeSubscriptionId?`<span class="plan-stripe-id">Stripe: <code>${escapeHtml(company.subscription.stripeSubscriptionId)}</code></span>`:''}
           </div>

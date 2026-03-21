@@ -115,3 +115,69 @@ En iPhone: Safari → Compartir → Añadir a pantalla de inicio
 Los datos están en Firestore, completamente separados del código.  
 Para actualizar la app basta con subir los nuevos ficheros JS/HTML.  
 **Los datos de Firestore no se tocan en ningún momento.**
+
+---
+
+## Cloudflare Pages (despliegue actual)
+
+### Subir el proyecto
+
+```bash
+# Opción 1: drag-and-drop en dash.cloudflare.com/pages → Create a project → Direct upload
+# Opción 2: conectar repositorio Git (GitHub/GitLab) → build command vacío, output directory "."
+```
+
+### Archivos de configuración incluidos
+
+| Fichero | Función |
+|---------|---------|
+| `_headers` | Cabeceras HTTP (seguridad, caché, SW) |
+| `_redirects` | Enrutado SPA para las 3 apps |
+| `netlify.toml` | Solo para referencia, Cloudflare lo ignora |
+| `.htaccess` | Solo para Apache/cPanel, Cloudflare lo ignora |
+
+### SPA routing en Cloudflare
+
+Cloudflare Pages detecta automáticamente apps de una sola página si **no hay un fichero `404.html`** en la raíz.
+Como Xperiences tiene 3 entry points (`index.html`, `admin.html`, `portal.html`), el fichero `_redirects` define explícitamente las rutas:
+
+```
+/admin/*   → admin.html   (sin cambiar URL)
+/portal/*  → portal.html
+/*         → index.html
+```
+
+
+### wrangler.toml — configuración del Worker
+
+Xperiences despliega como **Workers Assets** (el nuevo sistema unificado de Cloudflare).
+El fichero `wrangler.toml` le dice a Wrangler que es un sitio estático:
+
+```toml
+[assets]
+directory = "."
+not_found_handling = "single-page-application"
+```
+
+El modo `single-page-application` gestiona automáticamente el routing SPA:
+- Archivos que existen → se sirven directamente (`index.html`, `admin.html`, `assets/...`)
+- Rutas sin archivo → devuelve `index.html` (comportamiento SPA)
+
+El fichero `_redirects` solo necesita las reglas específicas de admin y portal.
+**NO** incluir `/* → /index.html` — eso lo maneja `not_found_handling` sin bucle infinito.
+
+### Firebase Auth y Cloudflare
+
+Firebase Auth usa `authDomain` para el flujo OAuth. Si usas dominio propio (ej. `xperiences.es`),
+añade ese dominio en la consola Firebase → Authentication → Settings → Authorized domains.
+
+### Purgar caché tras despliegue
+
+Cloudflare cachea los assets automáticamente. Si tras subir una versión nueva siguen
+sirviéndose archivos viejos: **Caching → Configuration → Purge Everything**.
+
+### Variables de entorno
+
+Cloudflare Pages no tiene variables de entorno para ficheros estáticos.
+Las credenciales van directamente en `assets/js/firebase-config.js` (que está en `.gitignore`
+si usas Git) o se inyectan en el paso de build si usas un bundler.

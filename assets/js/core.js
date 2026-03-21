@@ -68,17 +68,21 @@ const STATUS_LABELS={
 // ── Definición de planes ─────────────────────────────────────
 const PLANS = {
   trial: {
-    label: 'Básico (trial)',
+    // Trial 90 días: ACCESO COMPLETO — la empresa descubre el valor real
+    // antes de elegir plan. Al expirar → getPlanLimits() devuelve basico_a.
+    label: 'Trial (90 días — acceso completo)',
     monthlyFee: 0,
     commission: 0.10,
-    searchPriority: 3,
-    analytics: null,       // sin analytics
-    hasContactData: false, // solo nombre del cliente
-    hasPush: false,
-    hasBadge: null,
-    hasCompanyPromo: false,
-    hasXpPromo: false,
-    analyticsLabel: null
+    searchPriority: 9,
+    analytics: 365,
+    hasContactData: true,
+    hasPush: true,
+    hasBadge: 'featured',
+    hasCompanyPromo: true,
+    hasXpPromo: true,
+    analyticsSector: true,
+    analyticsLabel: 'Completo (trial)',
+    isTrial: true
   },
   basico_a: {
     label: 'Básico sin cuota (25%)',
@@ -140,10 +144,33 @@ const PLANS = {
 /** Retorna el objeto de límites/capacidades del plan activo de una empresa */
 function getPlanLimits(company) {
   const sub = company?.subscription || {};
-  const planKey = sub.status === 'cancelled' ? 'basico_a'
-    : sub.status === 'overdue' && !company?.graceVisible ? 'basico_a'
-    : (sub.plan || 'trial');
+
+  // ── 1. Casos de baja / impago ──────────────────────────────
+  if (sub.status === 'cancelled') return { ...PLANS.basico_a, planKey: 'basico_a' };
+  if (sub.status === 'overdue' && !company?.graceVisible) return { ...PLANS.basico_a, planKey: 'basico_a' };
+
+  const planKey = sub.plan || 'trial';
+
+  // ── 2. Trial expirado sin upgrade → cae a basico_a ─────────
+  // Comprobamos trialEndsAt independientemente del planKey actual,
+  // por si el status no se ha actualizado aún en Firestore
+  if (planKey === 'trial' && sub.trialEndsAt) {
+    const expired = new Date(sub.trialEndsAt) < new Date();
+    if (expired) {
+      return { ...PLANS.basico_a, planKey: 'basico_a', trialExpired: true };
+    }
+  }
+
   return { ...(PLANS[planKey] || PLANS.trial), planKey };
+}
+
+/** Días restantes de trial (null si no es trial o ya expiró) */
+function getTrialDaysLeft(company) {
+  const sub = company?.subscription || {};
+  if (sub.plan !== 'trial' || !sub.trialEndsAt) return null;
+  const ms = new Date(sub.trialEndsAt) - new Date();
+  if (ms <= 0) return 0;
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
 }
 
 /** ¿El plan está activo y puede mostrar la empresa en el buscador? */
@@ -712,7 +739,10 @@ function removeCartItem(itemId){const s=loadState();s.cart=(s.cart||[]).filter(i
 function clearCart(){const s=loadState();s.cart=[];saveState(s,'user');}
 async function confirmCartBookings(reservationData={}){const account=requireCustomerSession(`/auth?mode=login&redirect=${encodeURIComponent('/cart')}`);if(!account)throw new Error('AUTH_REQUIRED');const items=getCart();if(!items.length)return[];const profile=await saveCustomerProfile({displayName:reservationData.displayName||account.displayName||'',phone:reservationData.phone||account.phone||'',marketingOptIn:!!reservationData.marketingOptIn});const createdAt=nowIso();const reservationGroupId=uid('reservation');const created=items.map(item=>({id:uid('booking'),reservationGroupId,userId:account.uid,userEmail:account.email||profile.email||'',customer:{displayName:profile.displayName||reservationData.displayName||'',email:account.email||profile.email||'',phone:profile.phone||reservationData.phone||'',notes:String(reservationData.notes||'').trim()},companyId:item.companyId,companyName:item.companyName,companySlug:item.companySlug,experienceId:item.experienceId,experienceTitle:item.experienceTitle,offerId:item.offerId,offerName:item.offerName,quantity:Number(item.quantity||1),unitPrice:Number(item.unitPrice||0),totalPrice:Number(item.unitPrice||0)*Number(item.quantity||1),status:'pending',source:'app',createdAt,
       commission:getBookingCommission(getCompanyById(item.companyId)||{})
-    }));if(_db){const batch=_db.batch();created.forEach(booking=>batch.set(_db.doc(`${FIRESTORE_PATHS.bookings}/${booking.id}`),booking));await batch.commit();}created.forEach(({customer,userId,userEmail,reservationGroupId,status,source,companySlug,...publicBooking})=>addBooking(publicBooking));clearCart();await applyCustomerBenefits(created);return created;}
+    }));if(_db){const batch=_db.batch();created.forEach(booking=>batch.set(_db.doc(`${FIRESTORE_PATHS.bookings}/${booking.id}`),booking));await batch.commit();}created.forEach(({customer,userId,userEmail,reservationGroupId,status,source,companySlug,...publicBooking})=>addBooking(publicBooking));clearCart();await applyCustomerBenefits(created);
+  // Push FCM → notificar a cada empresa afectada (no bloqueante)
+  created.forEach(booking=>{triggerPushNewBooking(booking).catch(()=>{});});
+  return created;}
 
 function trackSearch(query,results){
   const s=loadState();s.analytics=s.analytics||{searches:[],companyViews:[],bookings:[],events:[]};
@@ -783,104 +813,20 @@ function getPopularChips(){
   return [...new Set([...fromAnalytics,...staticChips])].slice(0,7);
 }
 
-// ── Iconos SVG reutilizables ──────────────────────────────────
-const _SVG = {
-  // Maletín (Portal empresas) — sustituye el icono de casa que confundía
-  briefcase: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="2" y1="14" x2="22" y2="14"/></svg>`,
-  // Persona (Acceder)
-  person: `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.58-7 8-7s8 3 8 7"/></svg>`,
-  // Salida (Salir / Cerrar sesión)
-  logout: `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
-  // Hamburguesa (Menú admin)
-  menu: `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`,
-  // X cerrar menú
-  close: `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
-};
-
-// ── Toggle menú hamburguesa admin (global, persiste entre renders) ──
-(function(){
-  var _init=false;
-  window._xpToggleAdminMenu=function(){
-    var m=document.getElementById('admin-ham-menu');
-    var btn=document.getElementById('admin-ham-btn');
-    if(!m||!btn)return;
-    var open=!m.classList.contains('open');
-    // Calcular posición fixed basada en el botón (antes de mostrar)
-    if(open){
-      var r=btn.getBoundingClientRect();
-      // Anclar el dropdown justo debajo del botón, alineado a su borde derecho
-      var menuRight=Math.max(8,window.innerWidth-r.right);
-      var menuTop=r.bottom+8;
-      // Asegurar que no se salga por abajo
-      var maxH=window.innerHeight-menuTop-12;
-      m.style.top=menuTop+'px';
-      m.style.right=menuRight+'px';
-      m.style.left='auto';
-      m.style.maxHeight=maxH>200?maxH+'px':'';
-      m.style.overflowY=maxH<300?'auto':'';
-    }
-    m.classList.toggle('open',open);
-    btn.setAttribute('aria-expanded',String(open));
-    btn.innerHTML=open?_SVG.close:_SVG.menu;
-  };
-  if(!_init){
-    _init=true;
-    document.addEventListener('click',function(e){
-      if(!e.target.closest('.admin-hamburger-wrap')){
-        var m=document.getElementById('admin-ham-menu');
-        var btn=document.getElementById('admin-ham-btn');
-        if(m&&m.classList.contains('open')){
-          m.classList.remove('open');
-          if(btn){btn.setAttribute('aria-expanded','false');btn.innerHTML=_SVG.menu;}
-        }
-      }
-    },true);
-    // Cierra menú al navegar (hashchange)
-    window.addEventListener('hashchange',function(){
-      var m=document.getElementById('admin-ham-menu');
-      var btn=document.getElementById('admin-ham-btn');
-      if(m&&m.classList.contains('open')){
-        m.classList.remove('open');
-        if(btn){btn.setAttribute('aria-expanded','false');btn.innerHTML=_SVG.menu;}
-      }
-    });
-  }
-})();
-
 function shell(title,content,mode='public',opts={}){
-  // ── Icono maletín (Portal empresas) — no confunde con "volver al inicio" ──
-  const companyAccessIcon=`<a href="portal.html" class="company-access-icon" aria-label="Acceso empresas" title="Portal empresas">${_SVG.briefcase}</a>`;
+  const companyAccessIcon=`<a href="portal.html" class="company-access-icon" aria-label="Acceso empresas" title="Portal empresas"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="12.01"/><path d="M2 12h8m12 0h-8"/></svg></a>`;
   const cartCount=getCartCount();
   const cartIcon=`<a href="index.html#/cart" class="company-access-icon cart-access-icon" aria-label="Carrito" title="Carrito"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1.6" fill="currentColor"/><circle cx="17" cy="20" r="1.6" fill="currentColor"/><path d="M3 4h2l2.2 9.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 7H7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>${cartCount?`<span class="cart-badge">${cartCount}</span>`:''}</a>`;
   const publicExtra=opts.publicExtra||'';
   const brand=`<a class="brand brand-link brand-logo" href="index.html#/" aria-label="Inicio Xperiences" title="Inicio"><img src="assets/img/logo-xperiences.png" alt="Xperiences"></a>`;
   const customer=getCustomerAccount();
-  // ── Iconos en la nav pública ──
-  const customerNav=customer
-    ?`<a href="#/my-bookings">Mis reservas</a><a href="#/account">${escapeHtml(customer.displayName||customer.email||'Mi cuenta')}</a><a href="#/user-logout" class="nav-icon-link" title="Cerrar sesión" aria-label="Cerrar sesión">${_SVG.logout}</a>`
-    :`<a href="#/auth?mode=login" class="nav-icon-link nav-icon-text" title="Acceder" aria-label="Acceder">${_SVG.person}<span>Acceder</span></a>`;
-
-  // ── Nav admin: menú hamburguesa compacto ──
-  const adminHamMenu=`
-    <div class="admin-hamburger-wrap">
-      <button type="button" id="admin-ham-btn" class="admin-ham-btn" onclick="window._xpToggleAdminMenu()" aria-label="Menú" aria-expanded="false" aria-controls="admin-ham-menu">${_SVG.menu}</button>
-      <nav id="admin-ham-menu" class="admin-ham-menu" role="navigation" aria-label="Navegación admin">
-        <a href="#/admin">📊 Dashboard</a>
-        <a href="#/admin/companies">🏢 Empresas</a>
-        <a href="#/admin/analytics">📈 Reservas y analítica</a>
-        <a href="#/admin/finance">💰 Finanzas</a>
-        <a href="#/admin/search-quality">🔍 Calidad de búsqueda</a>
-        <a href="index.html#/">🔎 Ver buscador</a>
-        <a href="#/logout" class="admin-ham-logout">${_SVG.logout} Salir</a>
-      </nav>
-    </div>`;
-
+  const customerNav=customer?`<a href="#/my-bookings" class="nav-link-secondary">Mis reservas</a><a href="#/account" class="nav-link-account">${escapeHtml(customer.displayName||customer.email||'Mi cuenta')}</a><a href="#/user-logout" class="nav-link-logout">Salir</a>`:`<a href="#/auth?mode=login" class="nav-link-login">Acceder</a>`;
   const nav=mode==='admin'
-    ?adminHamMenu
+    ?`<nav class="nav-links"><a href="#/admin">Dashboard</a><a href="#/admin/companies">Empresas</a><a href="#/admin/analytics">Reservas y analítica</a><a href="#/admin/finance">Finanzas</a><a href="#/admin/search-quality">Calidad de búsqueda</a><a href="index.html#/">Ver buscador</a><a href="#/logout">Salir</a></nav>`
     :mode==='company'
-      ?`<nav class="nav-links nav-links-company"><a href="#/company-logout" class="nav-icon-link nav-icon-text" title="Cerrar sesión">${_SVG.logout}<span>Salir</span></a></nav>`
+      ?`<nav class="nav-links nav-links-company"><a href="#/company-logout">Salir</a></nav>`
       :`<nav class="nav-links nav-links-public">${publicExtra}${customerNav}${cartIcon}${companyAccessIcon}</nav>`;
-  return `<div class="shell ${(mode==='admin'||mode==='company')?'shell-admin':''}"><header class="topbar ${mode==='public'?'topbar-public':''}"><div>${brand}<div class="subtitle">${title}</div></div>${nav}</header><main class="main">${content}</main></div>`;
+  return `<div class="shell ${(mode==='admin'||mode==='company')?'shell-admin':''}"><header class="topbar ${mode==='public'?'topbar-public':''}"><div class="topbar-brand">${brand}<div class="subtitle">${title}</div></div>${nav}</header><main class="main">${content}</main></div>`;
 }
 
 function effectiveVisibility(company){
@@ -1321,4 +1267,261 @@ function _xpBootstrapError(e,backUrl=''){
       </div>`;
   }
   console.error('[XP] Bootstrap error:',e);
+}
+
+// ════════════════════════════════════════════════════════════════
+//  FCM — Push Notifications  (v8.0)
+// ════════════════════════════════════════════════════════════════
+//
+//  SETUP necesario (una sola vez, en Firebase Console):
+//  1. Ir a Project Settings → Cloud Messaging
+//  2. En "Web configuration" → Generate key pair → copiar la clave pública VAPID
+//  3. Pegarla en XP_FCM_VAPID_KEY más abajo
+//  4. Desplegar cf-push-worker con los secrets FCM_SERVER_KEY y FIREBASE_API_KEY
+//  5. Actualizar XP_PUSH_WORKER_URL con la URL del Worker desplegado
+
+// ── CONFIGURACIÓN ─────────────────────────────────────────────
+const XP_PUSH_WORKER_URL = 'https://xp-push.TU_CUENTA.workers.dev'; // ← actualiza
+const XP_FCM_VAPID_KEY   = 'TU_VAPID_KEY_PUBLICO_AQUI';              // ← pega aquí
+
+// ── Firebase Messaging singleton ─────────────────────────────
+let _fcmMessaging = null;
+
+function _getMessaging() {
+  if (!_fcmMessaging && window.firebase?.messaging) {
+    _fcmMessaging = firebase.messaging();
+  }
+  return _fcmMessaging;
+}
+
+// ── Inicializar FCM para CLIENTE ───────────────────────────────
+// Llama al hacer login el cliente o al cargar index.html con sesión activa
+async function initFCMForCustomer() {
+  const account = getCustomerAccount();
+  if (!account?.uid) return null;
+
+  try {
+    const token = await _requestAndSaveFcmToken(
+      `users/${account.uid}`,
+      'users',
+      account.uid
+    );
+    if (token) console.log('[FCM] Token cliente guardado');
+    return token;
+  } catch (e) {
+    console.warn('[FCM] initFCMForCustomer:', e.message);
+    return null;
+  }
+}
+
+// ── Inicializar FCM para EMPRESA ───────────────────────────────
+// Llama al hacer login en portal.html
+async function initFCMForCompany(companyId) {
+  if (!companyId) return null;
+  try {
+    const token = await _requestAndSaveFcmToken(
+      `companies/${companyId}`,
+      'companies',
+      companyId
+    );
+    if (token) console.log('[FCM] Token empresa guardado:', companyId);
+    return token;
+  } catch (e) {
+    console.warn('[FCM] initFCMForCompany:', e.message);
+    return null;
+  }
+}
+
+// ── Pedir permiso + obtener token + guardarlo en Firestore ────
+async function _requestAndSaveFcmToken(firestorePath, collection, docId) {
+  if (!('Notification' in window)) return null;
+  if (!navigator.serviceWorker) return null;
+
+  // Esperar a que el SW esté listo
+  const swReg = await navigator.serviceWorker.ready;
+  const messaging = _getMessaging();
+  if (!messaging) return null;
+
+  // Pedir permiso si aún no se ha dado
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    console.log('[FCM] Permiso denegado');
+    return null;
+  }
+
+  // Obtener token FCM
+  const token = await messaging.getToken({
+    vapidKey: XP_FCM_VAPID_KEY,
+    serviceWorkerRegistration: swReg
+  });
+
+  if (!token) return null;
+
+  // Guardar en Firestore (array de tokens para múltiples dispositivos)
+  if (_db) {
+    await _db.doc(firestorePath).set(
+      { fcmTokens: firebase.firestore.FieldValue.arrayUnion(token), updatedAt: nowIso() },
+      { merge: true }
+    );
+  }
+
+  return token;
+}
+
+// ── Eliminar token al cerrar sesión ───────────────────────────
+async function removeFcmToken(firestorePath) {
+  try {
+    const messaging = _getMessaging();
+    if (!messaging) return;
+    const token = await messaging.getToken({ vapidKey: XP_FCM_VAPID_KEY }).catch(() => null);
+    if (!token) return;
+    await messaging.deleteToken();
+    if (_db) {
+      await _db.doc(firestorePath).update({
+        fcmTokens: firebase.firestore.FieldValue.arrayRemove(token)
+      });
+    }
+  } catch (e) {
+    console.warn('[FCM] removeFcmToken:', e.message);
+  }
+}
+
+// ── Escuchar mensajes en FOREGROUND (app abierta) ─────────────
+function listenFCMForeground(onMessage) {
+  const messaging = _getMessaging();
+  if (!messaging) return () => {};
+  return messaging.onMessage(payload => {
+    console.log('[FCM] Foreground message:', payload);
+    if (typeof onMessage === 'function') onMessage(payload);
+  });
+}
+
+// ── Enviar push vía Cloudflare Worker ─────────────────────────
+// type: 'booking-new' | 'booking-confirmed' | 'promo-empresa' | 'promo-global'
+async function sendPushNotification({ tokens, title, bodyText, data, type }) {
+  if (!tokens?.length) return { ok: false, error: 'Sin tokens' };
+  if (!XP_PUSH_WORKER_URL || XP_PUSH_WORKER_URL.includes('TU_CUENTA')) {
+    console.warn('[FCM] XP_PUSH_WORKER_URL no configurado');
+    return { ok: false, error: 'Worker URL no configurada' };
+  }
+
+  // Obtener ID token de Firebase para autenticarse en el Worker
+  const user = firebase.auth().currentUser;
+  if (!user) return { ok: false, error: 'Sin sesión' };
+  const idToken = await user.getIdToken();
+
+  try {
+    const res = await fetch(`${XP_PUSH_WORKER_URL}/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken, tokens, title, bodyText, data, type })
+    });
+    const json = await res.json();
+    return json;
+  } catch (e) {
+    console.error('[FCM] sendPushNotification error:', e);
+    return { ok: false, error: e.message };
+  }
+}
+
+// ── Obtener tokens FCM de los clientes de una empresa ─────────
+// Busca usuarios que tienen bookings con esta empresa
+async function getCompanyCustomerFcmTokens(companyId) {
+  if (!_db || !companyId) return [];
+  try {
+    const snap = await _db.collection(FIRESTORE_PATHS.bookings)
+      .where('companyId', '==', companyId)
+      .where('status', 'in', ['pending', 'confirmed'])
+      .get();
+
+    const userIds = [...new Set(snap.docs.map(d => d.data().userId).filter(Boolean))];
+    if (!userIds.length) return [];
+
+    // Firestore limita whereIn a 10 — procesar en lotes
+    const tokens = [];
+    for (let i = 0; i < userIds.length; i += 10) {
+      const batch = userIds.slice(i, i + 10);
+      const usersSnap = await _db.collection('users')
+        .where(firebase.firestore.FieldPath.documentId(), 'in', batch)
+        .get();
+      usersSnap.forEach(doc => {
+        const t = doc.data().fcmTokens || [];
+        tokens.push(...t);
+      });
+    }
+    return [...new Set(tokens)]; // deduplicar
+  } catch (e) {
+    console.warn('[FCM] getCompanyCustomerFcmTokens:', e.message);
+    return [];
+  }
+}
+
+// ── Trigger: nueva reserva → notificar a la empresa ───────────
+// Llamado desde confirmCartBookings en core.js
+async function triggerPushNewBooking(booking) {
+  if (!booking?.companyId) return;
+  try {
+    const companySnap = await _db?.doc(`companies/${booking.companyId}`).get();
+    const tokens = companySnap?.data()?.fcmTokens || [];
+    if (!tokens.length) return;
+
+    const customerName = booking.customer?.displayName || 'Un cliente';
+    await sendPushNotification({
+      tokens,
+      title: '🎉 Nueva reserva',
+      bodyText: `${customerName} ha reservado "${booking.offerName}" (${booking.quantity}x)`,
+      data: {
+        url: `${window.location.origin}/portal.html#/company-admin`,
+        type: 'booking-new',
+        bookingId: booking.id,
+        companyId: booking.companyId
+      },
+      type: 'booking-new'
+    });
+  } catch (e) {
+    console.warn('[FCM] triggerPushNewBooking:', e.message);
+  }
+}
+
+// ── Trigger: reserva confirmada → notificar al cliente ────────
+async function triggerPushBookingConfirmed(booking) {
+  if (!booking?.userId) return;
+  try {
+    const userSnap = await _db?.doc(`users/${booking.userId}`).get();
+    const tokens = userSnap?.data()?.fcmTokens || [];
+    if (!tokens.length) return;
+
+    await sendPushNotification({
+      tokens,
+      title: '✅ Reserva confirmada',
+      bodyText: `Tu reserva en ${booking.companyName} está confirmada`,
+      data: {
+        url: `${window.location.origin}/#/bookings`,
+        type: 'booking-confirmed',
+        bookingId: booking.id
+      },
+      type: 'booking-confirmed'
+    });
+  } catch (e) {
+    console.warn('[FCM] triggerPushBookingConfirmed:', e.message);
+  }
+}
+
+// ── Todos los tokens de clientes (para push global del admin) ──
+async function getAllCustomerFcmTokens() {
+  if (!_db) return [];
+  try {
+    const snap = await _db.collection('users')
+      .where('roles.customer', '==', true)
+      .get();
+    const tokens = [];
+    snap.forEach(doc => {
+      const t = doc.data().fcmTokens || [];
+      tokens.push(...t);
+    });
+    return [...new Set(tokens)];
+  } catch (e) {
+    console.warn('[FCM] getAllCustomerFcmTokens:', e.message);
+    return [];
+  }
 }

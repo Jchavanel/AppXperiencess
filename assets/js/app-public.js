@@ -655,7 +655,7 @@ function renderCompany(slug){
       }).join('')}</div>`;
     }
 
-    const tagsHtml=tags.length?`<div class="exp-tags">${tags.map(t=>`<button type="button" class="exp-tag-chip" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('')}</div>`:'';
+    const tagsHtml=tags.length?`<div class="exp-tags">${tags.map(t=>`<span class="exp-tag-chip" role="button" tabindex="0" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join('')}</div>`:'';
     const descHtml=exp.description?`<p class="exp-description">${escapeHtml(exp.description)}</p>`:'';
     const seeAll=searchMode&&activeExps.length>1?`<p class="exp-see-all"><a href="#/company/${company.slug}">Ver todas las experiencias →</a></p>`:'';
 

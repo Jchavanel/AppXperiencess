@@ -140,8 +140,42 @@ function renderCompanyAdmin(){
           <strong class="plan-portal-value">${getPlanLimits(company).searchPriority}/10</strong>
         </div>
       </div>
-      ${!getPlanLimits(company).hasPush?`<div class="plan-upgrade-note">🔔 Activa notificaciones push y accede a analytics actualizando al plan Pro — <a href="mailto:hola@xperiences.es">contactar</a></div>`:''}
-      ${getPlanLimits(company).analytics?`<div class="plan-analytics-note">📊 Analytics disponibles: ${escapeHtml(getPlanLimits(company).analyticsLabel||'')} · <a href="#/analytics">Ver informe</a></div>`:''}
+      ${(()=>{
+        const limits=getPlanLimits(company);
+        const daysLeft=getTrialDaysLeft(company);
+        const parts=[];
+        // ── Banner trial activo ──────────────────────────────
+        if(limits.isTrial && daysLeft !== null && daysLeft > 0){
+          const urgency = daysLeft <= 7 ? 'trial-banner-urgent' : daysLeft <= 30 ? 'trial-banner-warn' : 'trial-banner-ok';
+          parts.push(`<div class="trial-banner ${urgency}">
+            <span class="trial-banner-icon">🎁</span>
+            <span class="trial-banner-text">
+              <strong>Período de prueba — acceso completo</strong>
+              ${daysLeft <= 1
+                ? `Expira <strong>hoy</strong>. Contrata un plan para mantener tus funciones.`
+                : `Te quedan <strong>${daysLeft} días</strong>. Al terminar, pasarás al plan gratuito sin comisión fija (25%).`
+              }
+            </span>
+            <a href="mailto:hola@xperiences.es?subject=Contratar plan" class="trial-banner-cta">Ver planes</a>
+          </div>`);
+        }
+        // ── Banner trial expirado (ya en basico_a) ───────────
+        if(limits.trialExpired){
+          parts.push(`<div class="trial-banner trial-banner-expired">
+            <span class="trial-banner-icon">⚠️</span>
+            <span class="trial-banner-text">
+              <strong>Tu período de prueba ha finalizado.</strong>
+              Estás en el plan gratuito (25% comisión). Actualiza para recuperar push, analytics y más visibilidad.
+            </span>
+            <a href="mailto:hola@xperiences.es?subject=Contratar plan" class="trial-banner-cta">Upgrade</a>
+          </div>`);
+        }
+        // ── Nota analytics ───────────────────────────────────
+        if(limits.analytics && !limits.trialExpired){
+          parts.push(`<div class="plan-analytics-note">📊 Analytics: ${escapeHtml(limits.analyticsLabel||'')} · <a href="#/analytics">Ver informe</a></div>`);
+        }
+        return parts.join('');
+      })()}
     </section>
     <section class="panel" id="company-bookings-panel"><div class="panel-head between"><h2>Reservas de tu empresa</h2></div><div class="xp-loading"><div class="xp-spinner"></div><p>Cargando reservas…</p></div></section>`
   ,'company');

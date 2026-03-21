@@ -1,0 +1,9 @@
+# _redirects — Cloudflare Workers Assets / Pages
+
+# Admin portal
+/admin    /admin.html   200
+/admin/*  /admin.html   200
+
+# Empresa portal
+/portal    /portal.html  200
+/portal/*  /portal.html  200

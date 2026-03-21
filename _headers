@@ -1,0 +1,27 @@
+# _headers — Cloudflare Pages
+# Equivalente al bloque [[headers]] de netlify.toml
+
+/*
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(self)
+
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+  Service-Worker-Allowed: /
+
+/manifest.json
+  Cache-Control: public, max-age=86400
+  Content-Type: application/manifest+json
+
+/manifest-admin.json
+  Cache-Control: public, max-age=86400
+  Content-Type: application/manifest+json
+
+/manifest-portal.json
+  Cache-Control: public, max-age=86400
+  Content-Type: application/manifest+json
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
