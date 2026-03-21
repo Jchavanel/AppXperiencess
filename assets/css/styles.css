@@ -729,3 +729,182 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .result-plan-badge{display:inline-flex;align-items:center;gap:3px;font-size:.68rem;font-weight:600;padding:.15rem .5rem;border-radius:999px;margin-left:.4rem;vertical-align:middle}
 .result-badge-featured{background:rgba(186,117,23,.25);color:rgba(240,185,80,.95);border:1px solid rgba(186,117,23,.3)}
 .result-badge-verified{background:rgba(29,158,117,.2);color:rgba(100,220,180,.9);border:1px solid rgba(29,158,117,.25)}
+
+/* ══════════════════════════════════════════════════════════════
+   MEJORAS v8.0 — Responsive + Dynamic Island + Hamburguesa
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Safe-area: topbar adaptado a Dynamic Island / notch ── */
+.topbar {
+  padding-top:    max(1rem, env(safe-area-inset-top));
+  padding-left:   max(1.1rem, env(safe-area-inset-left));
+  padding-right:  max(1.1rem, env(safe-area-inset-right));
+}
+/* En modo público el topbar es transparente, aún necesitamos el safe-area */
+.topbar-public {
+  padding-top:  max(.3rem, env(safe-area-inset-top));
+  padding-left: max(0px, env(safe-area-inset-left));
+  padding-right: max(0px, env(safe-area-inset-right));
+}
+
+/* ── Iconos con texto (Acceder, Salir portal) ── */
+.nav-icon-link {
+  display: inline-flex !important;
+  align-items: center;
+  gap: .38rem;
+  line-height: 1;
+}
+.nav-icon-link svg { flex-shrink: 0; }
+.nav-icon-text span { font-size: .92rem; }
+
+/* ── Admin: menú hamburguesa ── */
+.admin-hamburger-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.admin-ham-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 14px;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(149,198,255,.22);
+  color: rgba(235,248,255,.92);
+  cursor: pointer;
+  transition: background .18s, border-color .18s;
+  flex-shrink: 0;
+  /* Evitar que quede pegado al borde en iOS */
+  margin-right: max(0px, env(safe-area-inset-right));
+}
+.admin-ham-btn:hover {
+  background: rgba(255,255,255,.18);
+  border-color: rgba(149,198,255,.4);
+}
+.admin-ham-btn:focus-visible {
+  outline: 2px solid rgba(94,177,255,.8);
+  outline-offset: 2px;
+}
+
+.admin-ham-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 220px;
+  background: rgba(8,22,44,.97);
+  border: 1px solid rgba(149,198,255,.22);
+  border-radius: 18px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 24px 56px rgba(2,12,28,.55);
+  padding: .5rem;
+  z-index: 9000;
+  /* Oculto por defecto */
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px) scale(.97);
+  transform-origin: top right;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.admin-ham-menu.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+.admin-ham-menu a {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .75rem 1rem;
+  border-radius: 12px;
+  color: rgba(225,243,255,.88) !important;
+  font-size: .94rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background .14s;
+  white-space: nowrap;
+}
+.admin-ham-menu a:hover,
+.admin-ham-menu a:focus-visible {
+  background: rgba(77,163,255,.2);
+  outline: none;
+}
+.admin-ham-logout {
+  margin-top: .3rem;
+  border-top: 1px solid rgba(149,198,255,.14);
+  padding-top: .75rem !important;
+  color: rgba(255,180,180,.88) !important;
+}
+.admin-ham-logout svg { opacity: .85; }
+
+/* Indicador de ruta activa en hamburguesa */
+.admin-ham-menu a[data-active="true"] {
+  background: rgba(77,163,255,.18);
+  font-weight: 600;
+}
+
+/* ── Mejoras responsive generales en mobile ── */
+@media (max-width: 430px) {
+  /* Topbar público: logo más pequeño para no sobrepasar la Dynamic Island */
+  .topbar-public .brand-logo img { height: 40px; }
+  .brand-logo img { height: 44px; }
+
+  /* Nav pública: reducir gap y tamaño en pantallas muy pequeñas */
+  .nav-links-public {
+    gap: .45rem;
+  }
+  .nav-links-public a:not(.company-access-icon):not(.cart-access-icon):not(.nav-icon-link) {
+    font-size: .82rem;
+    padding: .5rem .65rem;
+  }
+  .nav-icon-text span { display: none; } /* Solo icono en pantallas muy pequeñas */
+
+  /* Asegurar que los iconos circulares tengan tamaño mínimo táctil */
+  .company-access-icon,
+  .cart-access-icon {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  /* Reducir padding horizontal del topbar en móvil pequeño */
+  .topbar {
+    padding-left:  max(.75rem, env(safe-area-inset-left));
+    padding-right: max(.75rem, env(safe-area-inset-right));
+    gap: .6rem;
+  }
+}
+
+/* Teléfonos estándar (375-430px) */
+@media (max-width: 520px) {
+  .nav-links-public {
+    gap: .5rem;
+  }
+  /* Menú hamburguesa en admin: asegurar que no se salga de la pantalla */
+  .admin-ham-menu {
+    right: max(0px, env(safe-area-inset-right));
+    max-width: calc(100vw - 2rem);
+  }
+  /* Shell padding lateral usando safe-area */
+  .shell {
+    padding-left:  max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+
+/* Tablets y escritorio: la hamburgues se mantiene pero más cómoda */
+@media (min-width: 768px) {
+  .admin-ham-menu {
+    min-width: 240px;
+  }
+  .nav-icon-text span { display: inline; }
+}
+
+/* ── Fix: admin topbar en modo non-public no era sticky ──
+   Añadir un poco de separación inferior ya que el shell-admin
+   no tiene el mismo padding-bottom automático */
+.shell-admin .topbar {
+  margin-bottom: 1.4rem;
+}

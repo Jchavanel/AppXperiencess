@@ -783,18 +783,88 @@ function getPopularChips(){
   return [...new Set([...fromAnalytics,...staticChips])].slice(0,7);
 }
 
+// ── Iconos SVG reutilizables ──────────────────────────────────
+const _SVG = {
+  // Maletín (Portal empresas) — sustituye el icono de casa que confundía
+  briefcase: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="2" y1="14" x2="22" y2="14"/></svg>`,
+  // Persona (Acceder)
+  person: `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.58-7 8-7s8 3 8 7"/></svg>`,
+  // Salida (Salir / Cerrar sesión)
+  logout: `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  // Hamburguesa (Menú admin)
+  menu: `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`,
+  // X cerrar menú
+  close: `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+};
+
+// ── Toggle menú hamburguesa admin (global, persiste entre renders) ──
+(function(){
+  var _init=false;
+  window._xpToggleAdminMenu=function(){
+    var m=document.getElementById('admin-ham-menu');
+    var btn=document.getElementById('admin-ham-btn');
+    if(!m||!btn)return;
+    var open=!m.classList.contains('open');
+    m.classList.toggle('open',open);
+    btn.setAttribute('aria-expanded',String(open));
+    btn.innerHTML=open?_SVG.close:_SVG.menu;
+  };
+  if(!_init){
+    _init=true;
+    document.addEventListener('click',function(e){
+      if(!e.target.closest('.admin-hamburger-wrap')){
+        var m=document.getElementById('admin-ham-menu');
+        var btn=document.getElementById('admin-ham-btn');
+        if(m&&m.classList.contains('open')){
+          m.classList.remove('open');
+          if(btn){btn.setAttribute('aria-expanded','false');btn.innerHTML=_SVG.menu;}
+        }
+      }
+    },true);
+    // Cierra menú al navegar (hashchange)
+    window.addEventListener('hashchange',function(){
+      var m=document.getElementById('admin-ham-menu');
+      var btn=document.getElementById('admin-ham-btn');
+      if(m&&m.classList.contains('open')){
+        m.classList.remove('open');
+        if(btn){btn.setAttribute('aria-expanded','false');btn.innerHTML=_SVG.menu;}
+      }
+    });
+  }
+})();
+
 function shell(title,content,mode='public',opts={}){
-  const companyAccessIcon=`<a href="portal.html" class="company-access-icon" aria-label="Acceso empresas" title="Portal empresas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 20V9l6-4 6 4v11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></a>`;
+  // ── Icono maletín (Portal empresas) — no confunde con "volver al inicio" ──
+  const companyAccessIcon=`<a href="portal.html" class="company-access-icon" aria-label="Acceso empresas" title="Portal empresas">${_SVG.briefcase}</a>`;
   const cartCount=getCartCount();
   const cartIcon=`<a href="index.html#/cart" class="company-access-icon cart-access-icon" aria-label="Carrito" title="Carrito"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1.6" fill="currentColor"/><circle cx="17" cy="20" r="1.6" fill="currentColor"/><path d="M3 4h2l2.2 9.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 7H7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>${cartCount?`<span class="cart-badge">${cartCount}</span>`:''}</a>`;
   const publicExtra=opts.publicExtra||'';
   const brand=`<a class="brand brand-link brand-logo" href="index.html#/" aria-label="Inicio Xperiences" title="Inicio"><img src="assets/img/logo-xperiences.png" alt="Xperiences"></a>`;
   const customer=getCustomerAccount();
-  const customerNav=customer?`<a href="#/my-bookings">Mis reservas</a><a href="#/account">${escapeHtml(customer.displayName||customer.email||'Mi cuenta')}</a><a href="#/user-logout">Salir</a>`:`<a href="#/auth?mode=login">Acceder</a>`;
+  // ── Iconos en la nav pública ──
+  const customerNav=customer
+    ?`<a href="#/my-bookings">Mis reservas</a><a href="#/account">${escapeHtml(customer.displayName||customer.email||'Mi cuenta')}</a><a href="#/user-logout" class="nav-icon-link" title="Cerrar sesión" aria-label="Cerrar sesión">${_SVG.logout}</a>`
+    :`<a href="#/auth?mode=login" class="nav-icon-link nav-icon-text" title="Acceder" aria-label="Acceder">${_SVG.person}<span>Acceder</span></a>`;
+
+  // ── Nav admin: menú hamburguesa compacto ──
+  const adminHamMenu=`
+    <div class="admin-hamburger-wrap">
+      <button type="button" id="admin-ham-btn" class="admin-ham-btn" onclick="window._xpToggleAdminMenu()" aria-label="Menú" aria-expanded="false" aria-controls="admin-ham-menu">${_SVG.menu}</button>
+      <nav id="admin-ham-menu" class="admin-ham-menu" role="navigation" aria-label="Navegación admin">
+        <a href="#/admin">📊 Dashboard</a>
+        <a href="#/admin/companies">🏢 Empresas</a>
+        <a href="#/admin/analytics">📈 Reservas y analítica</a>
+        <a href="#/admin/finance">💰 Finanzas</a>
+        <a href="#/admin/search-quality">🔍 Calidad de búsqueda</a>
+        <a href="index.html#/">🔎 Ver buscador</a>
+        <a href="#/logout" class="admin-ham-logout">${_SVG.logout} Salir</a>
+      </nav>
+    </div>`;
+
   const nav=mode==='admin'
-    ?`<nav class="nav-links"><a href="#/admin">Dashboard</a><a href="#/admin/companies">Empresas</a><a href="#/admin/analytics">Reservas y analítica</a><a href="#/admin/finance">Finanzas</a><a href="#/admin/search-quality">Calidad de búsqueda</a><a href="index.html#/">Ver buscador</a><a href="#/logout">Salir</a></nav>`
+    ?adminHamMenu
     :mode==='company'
-      ?`<nav class="nav-links nav-links-company"><a href="#/company-logout">Salir</a></nav>`
+      ?`<nav class="nav-links nav-links-company"><a href="#/company-logout" class="nav-icon-link nav-icon-text" title="Cerrar sesión">${_SVG.logout}<span>Salir</span></a></nav>`
       :`<nav class="nav-links nav-links-public">${publicExtra}${customerNav}${cartIcon}${companyAccessIcon}</nav>`;
   return `<div class="shell ${(mode==='admin'||mode==='company')?'shell-admin':''}"><header class="topbar ${mode==='public'?'topbar-public':''}"><div>${brand}<div class="subtitle">${title}</div></div>${nav}</header><main class="main">${content}</main></div>`;
 }

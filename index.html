@@ -23,11 +23,13 @@
   <meta property="og:image" content="./assets/img/xp-icon-512.png">
   <link rel="stylesheet" href="./assets/css/styles.css">
   <style>
+    /* Safe-area completo — cubre Dynamic Island, notch y bordes curvos */
     .shell {
-      padding-left:  max(1.25rem, env(safe-area-inset-left));
-      padding-right: max(1.25rem, env(safe-area-inset-right));
+      padding-left:   max(1.25rem, env(safe-area-inset-left));
+      padding-right:  max(1.25rem, env(safe-area-inset-right));
       padding-bottom: env(safe-area-inset-bottom);
     }
+    /* El topbar maneja su propio padding-top via CSS vars en styles.css */
   </style>
 </head>
 <body>
