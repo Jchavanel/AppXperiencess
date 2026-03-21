@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isOwner(userId) { return signedIn() && request.auth.uid == userId; }
+    function hasUserDoc() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function isAdmin() {
+      return hasUserDoc()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.admin == true;
+    }
+    function hasCompanyAccess(companyId) {
+      return hasUserDoc()
+        && companyId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.companyIds;
+    }
+    function bootstrapUnlocked() {
+      return !exists(/databases/$(database)/documents/config/system)
+        || get(/databases/$(database)/documents/config/system).data.adminBootstrapCompleted != true;
+    }
+    function validOwnerUserWrite(userId) {
+      return isOwner(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.email is string
+        && request.resource.data.roles is map
+        && request.resource.data.roles.companyIds is list
+        && request.resource.data.roles.admin is bool;
+    }
+    function ownerCanCreateSelf(userId) {
+      return validOwnerUserWrite(userId)
+        && request.resource.data.roles.companyIds.size() == 0
+        && (request.resource.data.roles.admin == false || bootstrapUnlocked());
+    }
+    function ownerCanUpdateSelf(userId) {
+      return validOwnerUserWrite(userId)
+        && request.resource.data.roles.companyIds == resource.data.roles.companyIds
+        && (
+          request.resource.data.roles.admin == resource.data.roles.admin
+          || (bootstrapUnlocked() && resource.data.roles.admin == false && request.resource.data.roles.admin == true)
+        );
+    }
+    function adminCanWriteUser(userId) {
+      return isAdmin()
+        && request.resource.data.uid == userId
+        && request.resource.data.roles is map
+        && request.resource.data.roles.companyIds is list
+        && request.resource.data.roles.admin is bool;
+    }
+
+    match /config/public {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /config/system {
+      allow read: if true;
+      allow write: if isAdmin()
+        || (bootstrapUnlocked() && signedIn()
+            && request.resource.data.bootstrapAdminUid == request.auth.uid
+            && request.resource.data.adminBootstrapCompleted == true);
+    }
+    match /config/privateAuth { allow read, write: if false; }
+
+    match /companies/{companyId} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin() || hasCompanyAccess(companyId);
+      allow delete: if isAdmin();
+    }
+
+    match /analytics/{doc} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if ownerCanCreateSelf(userId) || adminCanWriteUser(userId);
+      allow update: if ownerCanUpdateSelf(userId) || adminCanWriteUser(userId);
+      allow delete: if false;
+    }
+
+    match /bookings/{bookingId} {
+      // Crear: usuario autenticado, solo sus reservas
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+
+      // Leer individual: propietario o admin o empresa del booking
+      allow get: if signedIn()
+        && (resource.data.userId == request.auth.uid
+            || isAdmin()
+            || (resource.data.companyId is string && hasCompanyAccess(resource.data.companyId)));
+
+      // Listar: cualquier usuario autenticado puede listar
+      // (el query filtra por userId o companyId en el cliente; Firestore lo verifica en get)
+      allow list: if signedIn();
+
+      // Actualizar estado: admin o empresa autorizada
+      allow update: if isAdmin()
+        || (resource.data.companyId is string && hasCompanyAccess(resource.data.companyId));
+
+      allow delete: if isAdmin();
+    }
+
+    match /userState/{userId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "name": "Xperiences — Buscador de experiencias",
+  "short_name": "Xperiences",
+  "description": "Encuentra el plan perfecto en el momento exacto. Buscador inteligente de experiencias únicas.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#081528",
+  "theme_color": "#081528",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": [
+    "travel",
+    "lifestyle",
+    "entertainment"
+  ],
+  "icons": [
+    {
+      "src": "assets/img/xp-icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/img/xp-icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/img/xp-icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/img/xp-icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/img/xp-icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/img/xp-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/img/xp-icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/img/xp-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Buscar experiencias",
+      "short_name": "Buscar",
+      "description": "Abre el buscador de experiencias",
+      "url": "./index.html#/",
+      "icons": [
+        {
+          "src": "assets/img/xp-icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Panel empresa",
+      "short_name": "Mi panel",
+      "description": "Accede al portal de empresa",
+      "url": "./admin.html#/company-login",
+      "icons": [
+        {
+          "src": "assets/img/xp-icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

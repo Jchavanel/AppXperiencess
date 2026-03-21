@@ -1,0 +1,36 @@
+{
+  "name": "Xperiences — Mi empresa",
+  "short_name": "XP Empresa",
+  "description": "Portal de empresa para gestionar tu negocio en Xperiences.",
+  "start_url": "./portal.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#082820",
+  "theme_color": "#0e6e56",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "assets/img/portal-icon-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any" },
+    { "src": "assets/img/portal-icon-96.png",  "sizes": "96x96",   "type": "image/png", "purpose": "any" },
+    { "src": "assets/img/portal-icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
+    { "src": "assets/img/portal-icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "assets/img/portal-icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "any" },
+    { "src": "assets/img/portal-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/img/portal-icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "assets/img/portal-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mi panel",
+      "url": "./portal.html#/company-admin",
+      "icons": [{ "src": "assets/img/portal-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mis reservas",
+      "url": "./portal.html#/company-admin",
+      "icons": [{ "src": "assets/img/portal-icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

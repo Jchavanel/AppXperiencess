@@ -1,0 +1,36 @@
+# netlify.toml — Configuración de despliegue para Netlify
+
+[build]
+  publish = "."        # raíz del proyecto
+
+# ── Headers de seguridad y PWA ────────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(self)"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Service-Worker-Allowed = "/"
+
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+    Content-Type  = "application/manifest+json"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# ── Redireccionamiento SPA: todo a index.html ─────────────────
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

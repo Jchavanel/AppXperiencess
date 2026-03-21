@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Xperiences — Encuentra el plan perfecto</title>
+  <meta name="description" content="Buscador inteligente de experiencias únicas. Actividades, restaurantes y planes para cualquier momento.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#081528">
+  <meta name="color-scheme" content="dark">
+  <link rel="manifest" href="./manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Xperiences">
+  <link rel="apple-touch-icon" href="./assets/img/xp-apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="icon" type="image/x-icon" href="./favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/img/xp-favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/img/xp-favicon-16.png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Xperiences — Encuentra el plan perfecto">
+  <meta property="og:description" content="Buscador inteligente de experiencias únicas.">
+  <meta property="og:image" content="./assets/img/xp-icon-512.png">
+  <link rel="stylesheet" href="./assets/css/styles.css">
+  <style>
+    .shell {
+      padding-left:  max(1.25rem, env(safe-area-inset-left));
+      padding-right: max(1.25rem, env(safe-area-inset-right));
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- Firebase SDK v10 (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+  <!-- Configuración Firebase — EDITAR ANTES DE DESPLEGAR -->
+  <script src="./assets/js/firebase-config.js"></script>
+
+  <!-- Datos de ejemplo (seed inicial) -->
+  <script src="./assets/data/seed.js"></script>
+
+  <!-- Motor compartido (Firebase, auth, Firestore, estado, buscador) -->
+  <script src="./assets/js/core.js"></script>
+
+  <!-- App pública: buscador, reservas, cuenta usuario -->
+  <script src="./assets/js/app-public.js"></script>
+
+  <!-- Service Worker (PWA) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+          .then(function(reg) {
+            var reloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function() {
+              if (reloading) return; reloading = true; window.location.reload();
+            });
+            if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            reg.update();
+          }).catch(function(e){ console.warn('[XP] SW:', e); });
+      });
+    }
+  </script>
+
+  <!-- PWA Install Banner -->
+  <script>
+    (function(){
+      var _deferredPrompt = null;
+      var DISMISSED_KEY = 'xp-pwa-dismissed';
+      var INSTALLED_KEY = 'xp-pwa-installed';
+
+      // Don't show if already installed or dismissed recently
+      function wasDismissedRecently(){
+        var ts = parseInt(localStorage.getItem(DISMISSED_KEY)||'0',10);
+        return Date.now() - ts < 7 * 24 * 60 * 60 * 1000; // 7 days
+      }
+      function isInstalled(){
+        return localStorage.getItem(INSTALLED_KEY) === '1'
+          || window.matchMedia('(display-mode: standalone)').matches
+          || window.navigator.standalone === true;
+      }
+
+      function showBanner(prompt){
+        if(isInstalled() || wasDismissedRecently()) return;
+        var existing = document.getElementById('pwa-install-banner');
+        if(existing) return;
+
+        var banner = document.createElement('div');
+        banner.id = 'pwa-install-banner';
+        banner.className = 'pwa-banner';
+        banner.innerHTML =
+          '<div class="pwa-banner-icon"><img src="assets/img/xp-icon-192.png" alt="Xperiences"></div>' +
+          '<div class="pwa-banner-body"><strong>Instalar Xperiences</strong><span>Acceso rápido, funciona sin conexión</span></div>' +
+          '<div class="pwa-banner-actions">' +
+            '<button class="pwa-banner-install" id="pwa-btn-install">Instalar</button>' +
+            '<button class="pwa-banner-dismiss" id="pwa-btn-dismiss">Ahora no</button>' +
+          '</div>';
+        document.body.appendChild(banner);
+
+        document.getElementById('pwa-btn-install').addEventListener('click', function(){
+          banner.classList.add('hiding');
+          setTimeout(function(){ if(banner.parentNode) banner.parentNode.removeChild(banner); }, 350);
+          if(prompt && prompt.prompt){
+            prompt.prompt();
+            prompt.userChoice.then(function(r){
+              if(r.outcome === 'accepted') localStorage.setItem(INSTALLED_KEY, '1');
+            });
+          }
+        });
+        document.getElementById('pwa-btn-dismiss').addEventListener('click', function(){
+          banner.classList.add('hiding');
+          setTimeout(function(){ if(banner.parentNode) banner.parentNode.removeChild(banner); }, 350);
+          localStorage.setItem(DISMISSED_KEY, String(Date.now()));
+        });
+      }
+
+      // Listen for browser's beforeinstallprompt event
+      window.addEventListener('beforeinstallprompt', function(e){
+        e.preventDefault();
+        _deferredPrompt = e;
+        // Show after 3s to avoid overwhelming user on first load
+        setTimeout(function(){ showBanner(_deferredPrompt); }, 3000);
+      });
+
+      // iOS Safari: show manual instructions since it doesn't support beforeinstallprompt
+      function isIOS(){
+        return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+      }
+      function isSafari(){
+        return /safari/i.test(navigator.userAgent) && !/chrome|chromium|crios/i.test(navigator.userAgent);
+      }
+      if(isIOS() && isSafari() && !isInstalled() && !wasDismissedRecently()){
+        setTimeout(function(){
+          var banner = document.createElement('div');
+          banner.id = 'pwa-install-banner';
+          banner.className = 'pwa-banner';
+          banner.innerHTML =
+            '<div class="pwa-banner-icon"><img src="assets/img/xp-icon-192.png" alt="Xperiences"></div>' +
+            '<div class="pwa-banner-body"><strong>Instalar en iPhone/iPad</strong>' +
+            '<span>Pulsa <strong>Compartir</strong> 🔗 → <strong>Añadir a pantalla de inicio</strong></span></div>' +
+            '<div class="pwa-banner-actions"><button class="pwa-banner-dismiss" id="pwa-btn-dismiss">Cerrar</button></div>';
+          document.body.appendChild(banner);
+          document.getElementById('pwa-btn-dismiss').addEventListener('click', function(){
+            banner.classList.add('hiding');
+            setTimeout(function(){ if(banner.parentNode) banner.parentNode.removeChild(banner); }, 350);
+            localStorage.setItem(DISMISSED_KEY, String(Date.now()));
+          });
+        }, 4000);
+      }
+
+      // Track successful installs
+      window.addEventListener('appinstalled', function(){
+        localStorage.setItem(INSTALLED_KEY, '1');
+        var b = document.getElementById('pwa-install-banner');
+        if(b){ b.classList.add('hiding'); setTimeout(function(){ if(b.parentNode) b.parentNode.removeChild(b); }, 350); }
+      });
+    })();
+  </script>
+
+</body>
+</html>

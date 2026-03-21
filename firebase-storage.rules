@@ -1,0 +1,27 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Imágenes de empresas — solo la empresa propietaria puede escribir
+    match /companies/{companyId}/logo.{ext} {
+      // Lectura pública
+      allow read: if true;
+
+      // Escritura: la empresa propietaria o el admin
+      allow write: if request.auth != null
+        && (
+          // Admin puede escribir cualquier cosa
+          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.roles.admin == true
+          // La empresa solo puede escribir en su propia carpeta
+          || companyId in firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.roles.companyIds
+        )
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Bloquear todo lo demás
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

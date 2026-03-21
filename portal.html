@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Xperiences — Portal Empresa</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0e6e56">
+  <meta name="color-scheme" content="dark">
+  <meta name="application-name" content="XP Empresa">
+  <link rel="manifest" href="./manifest-portal.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="XP Empresa">
+  <link rel="apple-touch-icon" href="./assets/img/portal-apple-touch-icon.png">
+  <link rel="icon" type="image/x-icon" href="./favicon.ico">
+  <link rel="stylesheet" href="./assets/css/styles.css">
+  <style>
+    .shell {
+      padding-left:  max(1.25rem, env(safe-area-inset-left));
+      padding-right: max(1.25rem, env(safe-area-inset-right));
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- Firebase SDK v10 (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+
+  <!-- Configuración Firebase — EDITAR ANTES DE DESPLEGAR -->
+  <script src="./assets/js/firebase-config.js"></script>
+
+  <!-- Seed (necesario para hidratar estructura) -->
+  <script src="./assets/data/seed.js"></script>
+
+  <!-- Motor compartido (Firebase, auth, Firestore, estado, datos) -->
+  <script src="./assets/js/core.js"></script>
+
+  <!-- Portal empresa — EXCLUSIVO portal.html -->
+  <script src="./assets/js/app-portal.js"></script>
+
+  <!-- PWA -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+          .then(function(reg) {
+            if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            reg.update();
+          }).catch(function(e){ console.warn('[XP] SW:', e); });
+      });
+    }
+  </script>
+</body>
+</html>
