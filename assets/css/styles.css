@@ -693,3 +693,39 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .cart-layout h3 { color: rgba(235,248,255,.95); }
 .cart-layout .summary-row { color: rgba(200,225,255,.85); border-bottom-color: rgba(149,198,255,.1); }
 .cart-layout .summary-total strong { color: rgba(235,248,255,.95); }
+
+/* ── Sistema de planes v7.0 ──────────────────────────────── */
+
+/* Plan panel — admin company detail */
+.plan-panel{background:rgba(255,255,255,.05);border:1px solid rgba(149,198,255,.18);border-radius:14px;padding:1rem 1.1rem;margin-bottom:.75rem}
+.plan-panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem}
+.plan-name-display{font-size:.95rem;font-weight:500;color:rgba(235,248,255,.95)}
+.plan-commission-display{font-size:.82rem;color:rgba(140,185,230,.75);margin-left:.35rem}
+.plan-status-pill{font-size:.72rem;font-weight:600;padding:.2rem .65rem;border-radius:999px}
+.plan-status-active{background:rgba(29,158,117,.2);color:rgba(100,220,180,.9)}
+.plan-status-trial{background:rgba(55,138,221,.2);color:rgba(120,190,255,.9)}
+.plan-status-overdue{background:rgba(186,117,23,.2);color:rgba(230,175,80,.9)}
+.plan-status-cancelled{background:rgba(226,75,74,.2);color:rgba(240,130,130,.9)}
+.plan-meta{font-size:.78rem;color:rgba(140,185,230,.65);display:flex;flex-wrap:wrap;gap:.75rem;margin-bottom:.65rem}
+.plan-stripe-id code{font-size:.72rem}
+.plan-selector{display:flex;gap:.5rem;flex-wrap:wrap}
+.plan-selector select{flex:1;min-width:160px}
+.plan-selector button{flex-shrink:0}
+
+/* Plan info panel — portal empresa */
+.plan-info-panel{}
+.plan-portal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.6rem;margin-bottom:.75rem}
+.plan-portal-item{background:rgba(255,255,255,.05);border-radius:10px;padding:.6rem .8rem}
+.plan-portal-label{display:block;font-size:.72rem;color:rgba(140,185,230,.65);margin-bottom:.2rem}
+.plan-portal-value{font-size:1rem;font-weight:600;color:rgba(235,248,255,.95)}
+.plan-badge-pill{font-size:.75rem;font-weight:600;padding:.25rem .75rem;border-radius:999px}
+.plan-badge-featured{background:rgba(186,117,23,.2);color:rgba(230,175,80,.9)}
+.plan-badge-verified{background:rgba(29,158,117,.2);color:rgba(100,220,180,.9)}
+.plan-upgrade-note{font-size:.82rem;color:rgba(140,185,230,.72);padding:.6rem .75rem;background:rgba(55,138,221,.08);border-radius:8px;border:1px solid rgba(55,138,221,.15)}
+.plan-analytics-note{font-size:.82rem;color:rgba(140,185,230,.72);padding:.6rem .75rem;background:rgba(29,158,117,.07);border-radius:8px;border:1px solid rgba(29,158,117,.15);margin-top:.5rem}
+.plan-upgrade-note a,.plan-analytics-note a{color:rgba(100,175,255,.85)}
+
+/* Plan badges en resultados de búsqueda */
+.result-plan-badge{display:inline-flex;align-items:center;gap:3px;font-size:.68rem;font-weight:600;padding:.15rem .5rem;border-radius:999px;margin-left:.4rem;vertical-align:middle}
+.result-badge-featured{background:rgba(186,117,23,.25);color:rgba(240,185,80,.95);border:1px solid rgba(186,117,23,.3)}
+.result-badge-verified{background:rgba(29,158,117,.2);color:rgba(100,220,180,.9);border:1px solid rgba(29,158,117,.25)}

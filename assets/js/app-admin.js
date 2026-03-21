@@ -189,7 +189,34 @@ function renderAdminCompanyDetail(companyId){
   selected.contextPresets=presetArray(selected,'contextPresets','contextPreset',inferred.contextPreset||'dia');
   const options={searchPresets:[['general','General'],['plan_familiar','Plan familiar'],['restaurante_familiar','Restaurante familiar'],['actividad','Actividad / ocio'],['restauracion','Restauración'],['romantico','Plan romántico'],['cena_romantica','Cena romántica'],['indoor','Plan indoor / lluvia']],audiencePresets:[['general','General'],['familia','Familias'],['pareja','Parejas'],['grupos','Grupos / amigos']],contextPresets:[['dia','De día'],['tarde','Por la tarde'],['noche','Por la noche']]};
   const checks=(name,opts,selectedValues)=>`<div class="check-grid">${opts.map(([value,label])=>`<label class="check-item"><input type="checkbox" name="${name}" value="${value}" ${selectedValues.includes(value)?'checked':''}> <span>${label}</span></label>`).join('')}</div>`;
-  app.innerHTML=shell(`Empresa · ${company.name||'Nueva empresa'}`,`<section class="admin-two-cols"><section class="panel"><div class="panel-head between"><h2>Perfil de empresa</h2><a class="status-pill" target="_blank" href="portal.html">Portal empresa ↗</a></div><div class="save-hint">Acceso empresa · correo: <code>${escapeHtml(company.portalAuth?.email||"-")}</code> · estado: <code>${escapeHtml(company.portalAuth?.uid?"activa":"sin cuenta")}</code></div><div class="quality-box">${(()=>{const info=companyCompleteness(company);return `<strong>Ficha preparada: ${info.score}%</strong><div class="muted">${info.missing.length?`Faltan: ${escapeHtml(info.missing.join(', '))}`:'La empresa está lista para el buscador.'}</div>`;})()}</div><form id="company-auth-form" class="form-grid auth-inline-panel"><label>Email de acceso empresa<input type="email" name="portalEmail" value="${escapeHtml(company.portalAuth?.email||'')}" ${company.portalAuth?.uid?'disabled':''} placeholder="correo@empresa.com"></label><label>Contraseña temporal<input type="password" name="portalPassword" ${company.portalAuth?.uid?'disabled':''} placeholder="${company.portalAuth?.uid?'Cuenta ya creada':'Mínimo 6 caracteres'}"></label><div class="full button-row">${company.portalAuth?.uid?'<button type="button" id="company-send-reset" class="secondary">Enviar reseteo de contraseña</button>':'<button type="submit">Crear acceso empresa</button>'}<span class="save-hint" id="company-auth-msg"></span></div></form><form id="company-form" class="form-grid"><label>Nombre<input name="name" value="${escapeHtml(company.name)}" placeholder="Ej: Rancho El Pino" required></label><label>Tipo de plan de negocio<input name="businessType" value="${escapeHtml(company.businessType||'')}" placeholder="Ej: parque acuático, restaurante italiano"></label><label>Ciudad<input name="city" value="${escapeHtml(company.city||'')}" placeholder="Ej: Las Palmas de Gran Canaria"></label><div class="full form-section-head"><strong>Ubicación</strong><span class="muted small" style="font-weight:400;margin-left:8px">Busca o haz clic en el mapa</span></div>
+  app.innerHTML=shell(`Empresa · ${company.name||'Nueva empresa'}`,`<section class="admin-two-cols"><section class="panel"><div class="panel-head between"><h2>Perfil de empresa</h2><a class="status-pill" target="_blank" href="portal.html">Portal empresa ↗</a></div><div class="save-hint">Acceso empresa · correo: <code>${escapeHtml(company.portalAuth?.email||"-")}</code> · estado: <code>${escapeHtml(company.portalAuth?.uid?"activa":"sin cuenta")}</code></div><div class="quality-box">${(()=>{const info=companyCompleteness(company);return `<strong>Ficha preparada: ${info.score}%</strong><div class="muted">${info.missing.length?`Faltan: ${escapeHtml(info.missing.join(', '))}`:'La empresa está lista para el buscador.'}</div>`;})()}</div><div class="plan-panel">
+          <div class="plan-panel-head">
+            <div>
+              <strong class="plan-name-display">${getPlanLimits(company).label}</strong>
+              <span class="plan-commission-display">· comisión ${Math.round(getPlanLimits(company).commission*100)}%</span>
+            </div>
+            <span class="plan-status-pill plan-status-${company.subscription?.status||'active'}">${{active:'Activo',trial:'Trial',overdue:'Con deuda',cancelled:'Cancelado'}[company.subscription?.status||'active']||'Activo'}</span>
+          </div>
+          <div class="plan-meta">
+            ${company.subscription?.trialEndsAt?`<span>Trial hasta: <strong>${company.subscription.trialEndsAt}</strong></span>`:''} 
+            ${company.subscription?.renewsAt?`<span>Renueva: <strong>${company.subscription.renewsAt}</strong></span>`:''}
+            ${company.subscription?.stripeSubscriptionId?`<span class="plan-stripe-id">Stripe: <code>${escapeHtml(company.subscription.stripeSubscriptionId)}</code></span>`:''}
+          </div>
+          <div class="plan-selector">
+            <select id="plan-select">
+              ${Object.entries(PLANS).map(([key,p])=>`<option value="${key}" ${(company.subscription?.plan||'trial')===key?'selected':''}>${escapeHtml(p.label)} — ${Math.round(p.commission*100)}%${p.monthlyFee?` · ${p.monthlyFee}€/mes`:' (sin cuota)'}</option>`).join('')}
+            </select>
+            <select id="plan-status-select">
+              <option value="active" ${(company.subscription?.status||'active')==='active'?'selected':''}>Activo</option>
+              <option value="trial" ${company.subscription?.status==='trial'?'selected':''}>Trial</option>
+              <option value="overdue" ${company.subscription?.status==='overdue'?'selected':''}>Con deuda</option>
+              <option value="cancelled" ${company.subscription?.status==='cancelled'?'selected':''}>Cancelado</option>
+            </select>
+            <button type="button" id="save-plan-btn">Guardar plan</button>
+          </div>
+          <span class="save-hint" id="plan-save-msg"></span>
+        </div>
+        <form id="company-auth-form" class="form-grid auth-inline-panel"><label>Email de acceso empresa<input type="email" name="portalEmail" value="${escapeHtml(company.portalAuth?.email||'')}" ${company.portalAuth?.uid?'disabled':''} placeholder="correo@empresa.com"></label><label>Contraseña temporal<input type="password" name="portalPassword" ${company.portalAuth?.uid?'disabled':''} placeholder="${company.portalAuth?.uid?'Cuenta ya creada':'Mínimo 6 caracteres'}"></label><div class="full button-row">${company.portalAuth?.uid?'<button type="button" id="company-send-reset" class="secondary">Enviar reseteo de contraseña</button>':'<button type="submit">Crear acceso empresa</button>'}<span class="save-hint" id="company-auth-msg"></span></div></form><form id="company-form" class="form-grid"><label>Nombre<input name="name" value="${escapeHtml(company.name)}" placeholder="Ej: Rancho El Pino" required></label><label>Tipo de plan de negocio<input name="businessType" value="${escapeHtml(company.businessType||'')}" placeholder="Ej: parque acuático, restaurante italiano"></label><label>Ciudad<input name="city" value="${escapeHtml(company.city||'')}" placeholder="Ej: Las Palmas de Gran Canaria"></label><div class="full form-section-head"><strong>Ubicación</strong><span class="muted small" style="font-weight:400;margin-left:8px">Busca o haz clic en el mapa</span></div>
          <div class="full location-bar">
            <input type="search" id="admin-map-search" placeholder="Buscar dirección…" autocomplete="off">
            <button type="button" id="admin-gps-btn" class="secondary gps-btn" title="GPS">
@@ -261,6 +288,29 @@ function renderAdminCompanyDetail(companyId){
       requestUserLocation((coords,err)=>{if(!coords){saveMsg('#company-form-msg',err==='insecure'?'Requiere HTTPS':'GPS no disponible',3000);return;}setCoords(coords.lat,coords.lng,true);saveMsg('#company-form-msg','✓ GPS obtenido');});
     });
   })();
+
+
+  // ── Gestión de plan ────────────────────────────────────────
+  app.querySelector('#save-plan-btn')?.addEventListener('click',()=>{
+    const planKey=app.querySelector('#plan-select')?.value||'trial';
+    const status=app.querySelector('#plan-status-select')?.value||'active';
+    const now=nowIso();
+    const trialEnds=new Date(Date.now()+90*24*60*60*1000).toISOString().slice(0,10);
+    saveCompanyProfile(companyId,{
+      subscription:{
+        ...(getCompanyById(companyId)?.subscription||{}),
+        plan:planKey,
+        status,
+        commission:PLANS[planKey]?.commission||0.10,
+        monthlyFee:PLANS[planKey]?.monthlyFee||0,
+        trialEndsAt:planKey==='trial'?(getCompanyById(companyId)?.subscription?.trialEndsAt||trialEnds):(getCompanyById(companyId)?.subscription?.trialEndsAt||''),
+        updatedAt:now
+      }
+    });
+    saveMsg('#plan-save-msg','✓ Plan actualizado',3000);
+    // Refrescar vista para mostrar nuevo plan
+    setTimeout(()=>renderAdminCompanyDetail(companyId),400);
+  });
 
   app.querySelector('#company-auth-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget.elements;try{const created=await provisionCompanyPortalAccount(companyId,{email:f.portalEmail.value,password:f.portalPassword.value,displayName:company.name});saveMsg('#company-auth-msg',`Cuenta creada: ${created.email}`,4500);render();}catch(error){saveMsg('#company-auth-msg',mapAuthError(error),4500);}});
   app.querySelector('#company-send-reset')?.addEventListener('click',async()=>{try{await sendCompanyPortalReset(companyId);saveMsg('#company-auth-msg','Correo de reseteo enviado.',4500);}catch(error){saveMsg('#company-auth-msg',mapAuthError(error),4500);}});

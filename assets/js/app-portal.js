@@ -117,7 +117,33 @@ function renderCompanyAdmin(){
      </section>
 
      <section class="panel"><div class="panel-head between"><h2>Ofertas</h2><button id="company-new-offer" type="button">Nueva oferta</button></div><div id="company-offers-host"></div></section>
-     <section class="panel" id="company-bookings-panel"><div class="panel-head between"><h2>Reservas de tu empresa</h2></div><div class="xp-loading"><div class="xp-spinner"></div><p>Cargando reservas…</p></div></section>`
+     <section class="panel plan-info-panel">
+      <div class="panel-head between">
+        <h2>Tu plan</h2>
+        ${getPlanLimits(company).hasBadge?`<span class="plan-badge-pill plan-badge-${getPlanLimits(company).hasBadge}">${getPlanLimits(company).hasBadge==='featured'?'★ Destacado':'✓ Verificado'}</span>`:''}
+      </div>
+      <div class="plan-portal-grid">
+        <div class="plan-portal-item">
+          <span class="plan-portal-label">Plan activo</span>
+          <strong class="plan-portal-value">${escapeHtml(getPlanLimits(company).label)}</strong>
+        </div>
+        <div class="plan-portal-item">
+          <span class="plan-portal-label">Comisión por reserva</span>
+          <strong class="plan-portal-value">${Math.round(getPlanLimits(company).commission*100)}%</strong>
+        </div>
+        <div class="plan-portal-item">
+          <span class="plan-portal-label">Cuota mensual</span>
+          <strong class="plan-portal-value">${getPlanLimits(company).monthlyFee?getPlanLimits(company).monthlyFee.toFixed(2).replace('.',',')+' €':'Sin cuota'}</strong>
+        </div>
+        <div class="plan-portal-item">
+          <span class="plan-portal-label">Visibilidad búsqueda</span>
+          <strong class="plan-portal-value">${getPlanLimits(company).searchPriority}/10</strong>
+        </div>
+      </div>
+      ${!getPlanLimits(company).hasPush?`<div class="plan-upgrade-note">🔔 Activa notificaciones push y accede a analytics actualizando al plan Pro — <a href="mailto:hola@xperiences.es">contactar</a></div>`:''}
+      ${getPlanLimits(company).analytics?`<div class="plan-analytics-note">📊 Analytics disponibles: ${escapeHtml(getPlanLimits(company).analyticsLabel||'')} · <a href="#/analytics">Ver informe</a></div>`:''}
+    </section>
+    <section class="panel" id="company-bookings-panel"><div class="panel-head between"><h2>Reservas de tu empresa</h2></div><div class="xp-loading"><div class="xp-spinner"></div><p>Cargando reservas…</p></div></section>`
   ,'company');
 
   // ── Mapa Leaflet ──────────────────────────────────────────

@@ -59,6 +59,133 @@ const STATUS_LABELS={
   operationalStatus:{active:'Activa',trial:'Prueba',paused_non_payment:'Pausada por impago',paused_quality:'Pausada por calidad',suspended:'Suspendida',cancelled:'Cancelada'},
   financeStatus:{active:'Activa',trial:'Prueba',overdue:'Con deuda',cancelled:'Cancelada'}
 };
+
+// ════════════════════════════════════════════════════════════
+// SISTEMA DE PLANES — Xperiences v7.0
+// Fuente de verdad: company.subscription en Firestore
+// ════════════════════════════════════════════════════════════
+
+// ── Definición de planes ─────────────────────────────────────
+const PLANS = {
+  trial: {
+    label: 'Básico (trial)',
+    monthlyFee: 0,
+    commission: 0.10,
+    searchPriority: 3,
+    analytics: null,       // sin analytics
+    hasContactData: false, // solo nombre del cliente
+    hasPush: false,
+    hasBadge: null,
+    hasCompanyPromo: false,
+    hasXpPromo: false,
+    analyticsLabel: null
+  },
+  basico_a: {
+    label: 'Básico sin cuota (25%)',
+    monthlyFee: 0,
+    commission: 0.25,
+    searchPriority: 3,
+    analytics: null,
+    hasContactData: false,
+    hasPush: false,
+    hasBadge: null,
+    hasCompanyPromo: false,
+    hasXpPromo: false,
+    analyticsLabel: null
+  },
+  basico_b: {
+    label: 'Básico (29,90€/mes)',
+    monthlyFee: 29.90,
+    commission: 0.10,
+    searchPriority: 3,
+    analytics: null,
+    hasContactData: false,
+    hasPush: false,
+    hasBadge: null,
+    hasCompanyPromo: false,
+    hasXpPromo: false,
+    analyticsLabel: null
+  },
+  pro: {
+    label: 'Pro',
+    monthlyFee: 69.90,
+    commission: 0.08,
+    searchPriority: 6,
+    analytics: 90,         // días de histórico
+    hasContactData: true,  // tel + email cliente
+    hasPush: true,
+    hasBadge: 'verified',  // badge verificado
+    hasCompanyPromo: true, // empresa puede enviar oferta a sus clientes
+    hasXpPromo: false,
+    analyticsLabel: '90 días'
+  },
+  infinity: {
+    label: 'Infinity',
+    monthlyFee: 119.90,
+    commission: 0.05,
+    searchPriority: 9,
+    analytics: 365,
+    hasContactData: true,
+    hasPush: true,
+    hasBadge: 'featured',  // badge destacado
+    hasCompanyPromo: true,
+    hasXpPromo: true,      // Xperiences puede incluirla en promos globales
+    analyticsSector: true, // métricas de sector (datos agregados plataforma)
+    analyticsLabel: '365 días + sector'
+  }
+};
+
+// ── API principal del motor de planes ────────────────────────
+
+/** Retorna el objeto de límites/capacidades del plan activo de una empresa */
+function getPlanLimits(company) {
+  const sub = company?.subscription || {};
+  const planKey = sub.status === 'cancelled' ? 'basico_a'
+    : sub.status === 'overdue' && !company?.graceVisible ? 'basico_a'
+    : (sub.plan || 'trial');
+  return { ...(PLANS[planKey] || PLANS.trial), planKey };
+}
+
+/** ¿El plan está activo y puede mostrar la empresa en el buscador? */
+function planAllowsVisibility(company) {
+  const sub = company?.subscription || {};
+  if (sub.status === 'cancelled') return false;
+  if (sub.status === 'overdue' && !company?.graceVisible) return false;
+  return true;
+}
+
+/** Comisión aplicable a un booking concreto (decimal, ej: 0.08) */
+function getBookingCommission(company) {
+  return getPlanLimits(company).commission;
+}
+
+/** Prioridad de búsqueda sincronizada con el plan */
+function getPlanSearchPriority(company) {
+  return getPlanLimits(company).searchPriority;
+}
+
+/** Retrocompatibilidad: normalizar empresa que llega de Firestore sin subscription */
+function normalizeSubscription(company) {
+  if (company.subscription && company.subscription.plan) return company;
+  // Migrar campos legacy financeStatus/operationalStatus → subscription
+  const isActive = company.operationalStatus === 'active' || company.operationalStatus === 'trial';
+  const plan = !isActive ? 'basico_a' : 'trial';
+  company.subscription = {
+    plan,
+    status: isActive ? (company.financeStatus === 'overdue' ? 'overdue' : 'active') : 'cancelled',
+    commission: PLANS[plan].commission,
+    monthlyFee: PLANS[plan].monthlyFee,
+    trialStartedAt: company.createdAt || nowIso(),
+    trialEndsAt: company.trialEndsAt || '',
+    renewsAt: '',
+    stripeCustomerId: '',
+    stripeSubscriptionId: '',
+    updatedAt: nowIso()
+  };
+  return company;
+}
+
+
 const statusLabel=(group,value)=>STATUS_LABELS[group]?.[value]||value;
 
 const randomLetters=(len=4)=>Array.from({length:len},()=>String.fromCharCode(97+Math.floor(Math.random()*26))).join('');
@@ -129,6 +256,7 @@ function buildDefaultCustomerProfile(user,extra={}){
     email:normalizeEmail(user.email||extra.email||''),
     displayName:String(extra.displayName||user.displayName||'').trim(),
     phone:String(extra.phone||'').trim(),
+    ageRange:extra.ageRange||null,  // '18-25'|'26-35'|'36-50'|'51+'|null
     roles:normalizeRolePayload(extra.roles||{}),
     preferences:{marketingOptIn:!!extra.marketingOptIn},
     benefits:{tier:(extra.benefits&&extra.benefits.tier)||'member',loyaltyPoints:Number(extra.benefits?.loyaltyPoints||0),bookingCount:Number(extra.benefits?.bookingCount||0),memberSince:(extra.benefits&&extra.benefits.memberSince)||createdAt},
@@ -389,6 +517,7 @@ function hydrateState(state){
       legacyUsername:String(legacyPortal.username||legacyPortal.legacyUsername||'').trim()
     };
     c.updatedAt=c.updatedAt||nowIso();c.createdAt=c.createdAt||c.updatedAt;
+    c=normalizeSubscription(c);  // migrar a subscription si viene de legacy
     c.searchPriority=clamp(Number(c.searchPriority||5),1,10);
     c.experiences=(c.experiences||[]).map(e=>{
       e.id=e.id||uid('exp');e.createdAt=e.createdAt||nowIso();e.updatedAt=e.updatedAt||e.createdAt;
@@ -517,12 +646,38 @@ async function _persistToFirestore(){
 function getCompanies(){return clone(loadState().companies);}
 function getCompanyById(id){return getCompanies().find(c=>c.id===id)||null;}
 function getCompanyBySlug(slug){return getCompanies().find(c=>c.slug===slug)||null;}
-function saveCompanyProfile(id,updates){const s=loadState();const c=s.companies.find(v=>v.id===id);if(!c)throw new Error('Empresa no encontrada');Object.assign(c,updates);c.searchPriority=clamp(Number(c.searchPriority||5),1,10);c.slug=slugify(c.name);c.updatedAt=nowIso();saveState(s,'public');}
+function saveCompanyProfile(id,updates){
+  const s=loadState();const c=s.companies.find(v=>v.id===id);
+  if(!c)throw new Error('Empresa no encontrada');
+  Object.assign(c,updates);
+  // Si se actualiza el plan, sincronizar comisión y prioridad
+  if(updates.subscription?.plan){
+    const limits=getPlanLimits(c);
+    c.subscription.commission=limits.commission;
+    c.searchPriority=limits.searchPriority;
+  }else{
+    c.searchPriority=getPlanSearchPriority(c);
+  }
+  c.slug=slugify(c.name||c.id);
+  c.updatedAt=nowIso();
+  saveState(s,'public');
+}
 
 function addCompany(data){
   const s=loadState();
   const defaultExperience={id:uid('exp'),title:'',venueType:(data.businessType||''),description:'',intentTags:[],audienceTags:['general'],contextTags:['dia'],reasonHighlights:[],weatherSensitivity:'medium',indoorOutdoor:'mixed',searchPresets:['general'],audiencePresets:['general'],contextPresets:['dia'],active:true,createdAt:nowIso(),updatedAt:nowIso(),offers:[{id:uid('offer'),name:'',price:0,details:'',active:true,createdAt:nowIso(),updatedAt:nowIso()}]};
-  const c={id:uid('company'),adminKey:uid('admin'),slug:slugify(data.name||uid('company')),name:'',city:'',businessType:'',companyDescription:'',imageUrl:'',lat:null,lng:null,sustainabilityLevel:3,weatherScore:3,searchPriority:5,operationalStatus:'active',financeStatus:'trial',graceVisible:false,trialDays:30,trialEndsAt:'',notes:'',createdAt:nowIso(),updatedAt:nowIso(),portalAuth:{email:'',uid:'',status:'pending',linkedAt:'',updatedAt:nowIso(),legacyUsername:''},experiences:[defaultExperience],...data};
+  const _now=nowIso();
+  const _trialEnds=new Date(Date.now()+90*24*60*60*1000).toISOString().slice(0,10);
+  const c={id:uid('company'),adminKey:uid('admin'),slug:slugify(data.name||uid('company')),
+    name:'',city:'',businessType:'',companyDescription:'',imageUrl:'',lat:null,lng:null,
+    sustainabilityLevel:3,weatherScore:3,searchPriority:PLANS.trial.searchPriority,
+    operationalStatus:'active',financeStatus:'trial',graceVisible:false,
+    notes:'',createdAt:_now,updatedAt:_now,
+    subscription:{plan:'trial',status:'active',commission:PLANS.trial.commission,
+      monthlyFee:0,trialStartedAt:_now,trialEndsAt:_trialEnds,
+      renewsAt:'',stripeCustomerId:'',stripeSubscriptionId:'',updatedAt:_now},
+    portalAuth:{email:'',uid:'',status:'pending',linkedAt:'',updatedAt:_now,legacyUsername:''},
+    experiences:[defaultExperience],...data};
   if(!c.experiences||!c.experiences.length)c.experiences=[defaultExperience];
   if(!c.portalAuth)c.portalAuth={email:'',uid:'',status:'pending',linkedAt:'',updatedAt:nowIso(),legacyUsername:''};
   s.companies.unshift(c);saveState(s,'public');return clone(c);
@@ -555,7 +710,9 @@ function addToCart(payload){const s=loadState();s.cart=s.cart||[];const found=s.
 function updateCartItemQuantity(itemId,quantity){const s=loadState();const item=(s.cart||[]).find(i=>i.id===itemId);if(!item)return;item.quantity=Math.max(1,Number(quantity||1));item.updatedAt=nowIso();saveState(s,'user');}
 function removeCartItem(itemId){const s=loadState();s.cart=(s.cart||[]).filter(i=>i.id!==itemId);saveState(s,'user');}
 function clearCart(){const s=loadState();s.cart=[];saveState(s,'user');}
-async function confirmCartBookings(reservationData={}){const account=requireCustomerSession(`/auth?mode=login&redirect=${encodeURIComponent('/cart')}`);if(!account)throw new Error('AUTH_REQUIRED');const items=getCart();if(!items.length)return[];const profile=await saveCustomerProfile({displayName:reservationData.displayName||account.displayName||'',phone:reservationData.phone||account.phone||'',marketingOptIn:!!reservationData.marketingOptIn});const createdAt=nowIso();const reservationGroupId=uid('reservation');const created=items.map(item=>({id:uid('booking'),reservationGroupId,userId:account.uid,userEmail:account.email||profile.email||'',customer:{displayName:profile.displayName||reservationData.displayName||'',email:account.email||profile.email||'',phone:profile.phone||reservationData.phone||'',notes:String(reservationData.notes||'').trim()},companyId:item.companyId,companyName:item.companyName,companySlug:item.companySlug,experienceId:item.experienceId,experienceTitle:item.experienceTitle,offerId:item.offerId,offerName:item.offerName,quantity:Number(item.quantity||1),unitPrice:Number(item.unitPrice||0),totalPrice:Number(item.unitPrice||0)*Number(item.quantity||1),status:'pending',source:'app',createdAt}));if(_db){const batch=_db.batch();created.forEach(booking=>batch.set(_db.doc(`${FIRESTORE_PATHS.bookings}/${booking.id}`),booking));await batch.commit();}created.forEach(({customer,userId,userEmail,reservationGroupId,status,source,companySlug,...publicBooking})=>addBooking(publicBooking));clearCart();await applyCustomerBenefits(created);return created;}
+async function confirmCartBookings(reservationData={}){const account=requireCustomerSession(`/auth?mode=login&redirect=${encodeURIComponent('/cart')}`);if(!account)throw new Error('AUTH_REQUIRED');const items=getCart();if(!items.length)return[];const profile=await saveCustomerProfile({displayName:reservationData.displayName||account.displayName||'',phone:reservationData.phone||account.phone||'',marketingOptIn:!!reservationData.marketingOptIn});const createdAt=nowIso();const reservationGroupId=uid('reservation');const created=items.map(item=>({id:uid('booking'),reservationGroupId,userId:account.uid,userEmail:account.email||profile.email||'',customer:{displayName:profile.displayName||reservationData.displayName||'',email:account.email||profile.email||'',phone:profile.phone||reservationData.phone||'',notes:String(reservationData.notes||'').trim()},companyId:item.companyId,companyName:item.companyName,companySlug:item.companySlug,experienceId:item.experienceId,experienceTitle:item.experienceTitle,offerId:item.offerId,offerName:item.offerName,quantity:Number(item.quantity||1),unitPrice:Number(item.unitPrice||0),totalPrice:Number(item.unitPrice||0)*Number(item.quantity||1),status:'pending',source:'app',createdAt,
+      commission:getBookingCommission(getCompanyById(item.companyId)||{})
+    }));if(_db){const batch=_db.batch();created.forEach(booking=>batch.set(_db.doc(`${FIRESTORE_PATHS.bookings}/${booking.id}`),booking));await batch.commit();}created.forEach(({customer,userId,userEmail,reservationGroupId,status,source,companySlug,...publicBooking})=>addBooking(publicBooking));clearCart();await applyCustomerBenefits(created);return created;}
 
 function trackSearch(query,results){
   const s=loadState();s.analytics=s.analytics||{searches:[],companyViews:[],bookings:[],events:[]};
@@ -642,7 +799,15 @@ function shell(title,content,mode='public',opts={}){
   return `<div class="shell ${(mode==='admin'||mode==='company')?'shell-admin':''}"><header class="topbar ${mode==='public'?'topbar-public':''}"><div>${brand}<div class="subtitle">${title}</div></div>${nav}</header><main class="main">${content}</main></div>`;
 }
 
-function effectiveVisibility(company){if(['paused_non_payment','paused_quality','suspended','cancelled'].includes(company.operationalStatus))return false;if(['cancelled','suspended'].includes(company.financeStatus))return false;if(company.financeStatus==='overdue'&&!company.graceVisible)return false;return true;}
+function effectiveVisibility(company){
+  // Plan-based visibility (new system)
+  if(company.subscription)return planAllowsVisibility(company);
+  // Legacy fallback
+  if(['paused_non_payment','paused_quality','suspended','cancelled'].includes(company.operationalStatus))return false;
+  if(['cancelled','suspended'].includes(company.financeStatus))return false;
+  if(company.financeStatus==='overdue'&&!company.graceVisible)return false;
+  return true;
+}
 // ══════════════════════════════════════════════════════════════
 // MOTOR DE BÚSQUEDA v5.1 — Prioridad diferencial
 // Principio: tokens específicos (caballo, quad) dominan sobre
@@ -950,7 +1115,8 @@ function runSearch(query,filters){
       experienceDescription:c.experience.description,venueType:c.experience.venueType,
       minPrice:c.minPrice,distanceKm:c.km,kind:c.kind,
       semanticScore:c.semanticScore,learningBoost:c.learningBoost,finalScore:c.finalScore,
-      displayTags:[...(c.experience.manualSearchTags||[]),...(c.experience.intentTags||[])].slice(0,4)
+      displayTags:[...(c.experience.manualSearchTags||[]),...(c.experience.intentTags||[])].slice(0,4),
+      planBadge:getPlanLimits(c.company).hasBadge||null
     }));
   if(filters?.sort==='precio-asc')results=results.sort((a,b)=>a.minPrice-b.minPrice);
   else if(filters?.sort==='precio-desc')results=results.sort((a,b)=>b.minPrice-a.minPrice);
