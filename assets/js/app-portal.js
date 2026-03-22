@@ -391,7 +391,27 @@ function renderCompanyAdmin(){
   fetchCompanyBookings(companyId).then(rows=>{
     const panel=app.querySelector('#company-bookings-panel');if(!panel)return;
     const sm={pending:'Pendiente',confirmed:'Confirmada',cancelled:'Cancelada',attended:'Asistida'};
-    panel.innerHTML=`<div class="panel-head between"><h2>Reservas de tu empresa</h2><span class="muted small">${rows.length} reserva(s)</span></div>`+(rows.length?`<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Cliente</th><th>Experiencia</th><th>Oferta</th><th>Uds.</th><th>Total</th><th>Estado</th></tr></thead><tbody>${rows.slice(0,50).map(r=>`<tr><td>${new Date(r.createdAt).toLocaleString('es-ES')}</td><td>${escapeHtml(r.customer?.displayName||r.userEmail||'-')}<br><small class="muted">${escapeHtml(r.customer?.phone||'')}</small></td><td>${escapeHtml(r.experienceTitle||'-')}</td><td>${escapeHtml(r.offerName||'-')}</td><td>${r.quantity||1}</td><td>${formatEuro(r.totalPrice)}</td><td><span class="status-pill">${sm[r.status]||r.status||'Pendiente'}</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">No hay reservas todavía para tu empresa.</p>');
+    panel.innerHTML=`<div class="panel-head between"><h2>Reservas de tu empresa</h2><span class="muted small">${rows.length} reserva(s)</span></div>`+(rows.length?`<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Cliente</th><th>Experiencia</th><th>Oferta</th><th>Uds.</th><th>Total</th><th>Estado</th></tr></thead><tbody>${rows.slice(0,50).map(r=>`<tr><td>${new Date(r.createdAt).toLocaleString('es-ES')}</td><td>${escapeHtml(r.customer?.displayName||r.userEmail||'-')}<br><small class="muted">${escapeHtml(r.customer?.phone||'')}</small></td><td>${escapeHtml(r.experienceTitle||'-')}</td><td>${escapeHtml(r.offerName||'-')}</td><td>${r.quantity||1}</td><td>${formatEuro(r.totalPrice)}</td><td><span class="status-pill">${sm[r.status]||r.status||'Pendiente'}</span></td><td>${r.userId?`<button class="booking-chat-btn" data-user-id="${escapeHtml(r.userId)}" data-user-name="${escapeHtml(r.customer?.displayName||r.userEmail||'Cliente')}" data-chat-id="${escapeHtml(getChatId(companyId,r.userId))}" title="Abrir chat con cliente"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">No hay reservas todavía para tu empresa.</p>');
+    // Listeners botones chat por reserva
+    panel.querySelectorAll('.booking-chat-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        // Inicializar chat con este cliente y navegar a la sección mensajes
+        const meta={
+          chatId:    btn.dataset.chatId,
+          companyId: companyId,
+          userId:    btn.dataset.userId,
+          userName:  btn.dataset.userName
+        };
+        ensureChat(companyId, btn.dataset.userId).then(()=>{
+          setHashRoute('/company-chat');
+          // Pequeño delay para que renderCompanyChat ya esté montado
+          setTimeout(()=>{
+            const item=document.querySelector(`.chat-conv-item[data-chat-id="${meta.chatId}"]`);
+            if(item) item.click();
+          }, 400);
+        }).catch(err=>alert('No se pudo abrir el chat: '+err.message));
+      });
+    });
   }).catch(err=>{const panel=app.querySelector('#company-bookings-panel');if(panel)panel.innerHTML=`<div class="panel-head"><h2>Reservas</h2></div><p class="muted">${escapeHtml(mapAuthError(err))}</p>`;});
 
   // Experiencias
