@@ -42,6 +42,14 @@ function renderCompanyAdmin(){
     `<section class="panel"><div class="panel-head between"><h2>Portal de empresa</h2><a class="status-pill" href="index.html#/company/${company.slug}">Ver ficha pública</a></div>
      <p class="muted">Gestiona el contenido, experiencias, ofertas y ubicación de tu negocio.</p></section>
 
+     ${company.lat && company.lng ? `<section class="panel company-weather-portal-panel">
+       <div class="panel-head between">
+         <h2>Tiempo en tu zona</h2>
+         <span class="muted small" id="weather-portal-updated"></span>
+       </div>
+       <div id="weather-portal-slot"><div class="xp-loading"><div class="xp-spinner"></div><p>Cargando meteorología…</p></div></div>
+     </section>` : ''}
+
      <section class="admin-two-cols">
       <section class="panel"><div class="panel-head"><h2>Datos del negocio</h2></div>
        <form id="company-admin-form" class="form-grid">
@@ -185,6 +193,20 @@ function renderCompanyAdmin(){
     const btn=app.querySelector('#'+id);
     if(btn) btn.addEventListener('click',e=>{e.preventDefault();renderPlanesModal(company);});
   });
+
+  // ── Tiempo real para el portal empresa ─────────────────────
+  if(company.lat && company.lng){
+    fetchWeather(company.lat, company.lng).then(wd=>{
+      const slot = app.querySelector('#weather-portal-slot');
+      if(!slot || !wd) return;
+      slot.innerHTML = weatherBadgeHtml(wd, 'expanded');
+      const ts = app.querySelector('#weather-portal-updated');
+      if(ts) ts.textContent = 'Actualizado ' + new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+    }).catch(()=>{
+      const slot = app.querySelector('#weather-portal-slot');
+      if(slot) slot.innerHTML = '<p class="muted small">No se pudo obtener la meteorología.</p>';
+    });
+  }
 
   // ── Mapa Leaflet ──────────────────────────────────────────
   let _map=null;let _marker=null;

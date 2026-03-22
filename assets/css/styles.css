@@ -934,3 +934,78 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   text-align:center;line-height:1.6;
 }
 .xp-plans-footer-note a{color:rgba(100,160,255,.6);text-decoration:underline}
+
+/* ══════════════════════════════════════════════════════════════
+   Meteorología en tiempo real — Open-Meteo
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Badge compacto en cards de resultados ──────────────────── */
+.weather-badge{
+  display:inline-flex;align-items:center;gap:3px;
+  padding:2px 7px;border-radius:999px;
+  font-size:.75rem;font-weight:600;
+  vertical-align:middle;
+  transition:background .2s;
+}
+.weather-badge-icon{font-size:13px;line-height:1}
+.weather-badge-temp{font-size:.75rem;color:rgba(220,240,255,.9)}
+.weather-badge-sunny {background:rgba(250,200,60,.15);border:1px solid rgba(250,200,60,.25)}
+.weather-badge-cloudy {background:rgba(160,185,220,.12);border:1px solid rgba(160,185,220,.2)}
+.weather-badge-rain   {background:rgba(80,140,220,.15);border:1px solid rgba(80,140,220,.25)}
+.weather-badge-fog    {background:rgba(160,170,190,.12);border:1px solid rgba(160,170,190,.2)}
+.weather-badge-snow   {background:rgba(200,220,255,.12);border:1px solid rgba(200,220,255,.2)}
+.weather-badge-storm  {background:rgba(120,80,200,.15);border:1px solid rgba(120,80,200,.25)}
+
+/* ── Panel expandido — ficha empresa y portal ───────────────── */
+.weather-panel{
+  border:1px solid rgba(149,198,255,.15);
+  border-radius:14px;
+  padding:1rem 1.1rem;
+  background:rgba(255,255,255,.04);
+  margin-bottom:.75rem;
+}
+.weather-panel-main{
+  display:flex;align-items:center;gap:1rem;
+  margin-bottom:.9rem;
+}
+.weather-main-icon{font-size:2.5rem;line-height:1;flex-shrink:0}
+.weather-main-info{display:flex;flex-direction:column;gap:.1rem}
+.weather-main-temp{font-size:1.6rem;font-weight:700;color:#f4f8ff;line-height:1}
+.weather-main-label{font-size:.88rem;color:rgba(180,215,255,.8);font-weight:500}
+.weather-main-feels{font-size:.75rem;color:rgba(140,185,230,.55);margin-top:.1rem}
+
+/* ── Forecast 3 días ───────────────────────────────────────── */
+.weather-daily{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:8px;margin-bottom:.6rem;
+}
+.weather-day{
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:.5rem .3rem;border-radius:10px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(149,198,255,.1);
+}
+.weather-day-name{font-size:.72rem;color:rgba(140,185,230,.55);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.weather-day-icon{font-size:1.3rem;line-height:1}
+.weather-day-max{font-size:.88rem;font-weight:700;color:rgba(220,240,255,.9)}
+.weather-day-min{font-size:.78rem;color:rgba(140,185,230,.5)}
+.weather-day-rain{font-size:.7rem;color:rgba(100,160,240,.7);background:rgba(80,140,220,.12);padding:1px 5px;border-radius:99px}
+
+.weather-source{font-size:.68rem;color:rgba(100,140,200,.35);text-align:right}
+
+/* ── Slot vacío mientras carga ─────────────────────────────── */
+.company-weather-slot{margin-bottom:.5rem}
+.company-weather-portal-panel .xp-loading{padding:.75rem 0}
+
+/* ── Hero badge animado cuando tiene datos reales ──────────── */
+.weather-hero-live .weather-badge{animation:weather-pop .3s ease both}
+@keyframes weather-pop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* ── Boost indoor badge (cuando llueve, las actividades indoor suben) */
+.result-indoor-boost::after{
+  content:'Ideal si llueve';
+  font-size:.68rem;padding:2px 7px;border-radius:999px;
+  background:rgba(80,140,220,.18);color:rgba(140,190,255,.8);
+  border:1px solid rgba(80,140,220,.25);
+  margin-left:5px;white-space:nowrap;vertical-align:middle;
+}

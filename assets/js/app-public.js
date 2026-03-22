@@ -305,7 +305,7 @@ function renderResults(query,filtersOverride){
                 <p class="result-desc">${escapeHtml(item.experienceDescription||item.companyDescription)}</p>
                 ${cardTagsHtml(item)}
                 <div class="result-meta">
-                  <span>${weatherIcon(item.weatherScore)}</span>
+                  <span class="weather-live-badge" data-company="${item.companyId}">${weatherBadgeHtml(getLiveWeather(item.companyId))||weatherIcon(item.weatherScore)}</span>
                   <span>${sustainabilityLeaf(item.sustainabilityLevel)}</span>
                   ${item.distanceKm!=null?`<span class="dist-pill">📍 ${kmLabel(item.distanceKm)}</span>`:''}
                   <span class="city-pill">${escapeHtml(item.city)}</span>
@@ -346,6 +346,14 @@ function renderResults(query,filtersOverride){
     rerender(target,filters);
   }));
   app.querySelectorAll('.search-chip[data-chip]').forEach(btn=>btn.addEventListener('click',()=>setHashRoute(`/results?q=${encodeURIComponent(btn.dataset.chip)}`)));
+
+  // ── Enriquecer con tiempo real (async, no bloquea UI) ────────
+  // Fetcha meteología por coordenadas exactas de cada empresa
+  // y actualiza los badges sin re-renderizar
+  enrichResultsWithWeather(results, (companyId, weatherData) => {
+    const badge = app.querySelector(`.weather-live-badge[data-company="${companyId}"]`);
+    if (badge) badge.innerHTML = weatherBadgeHtml(weatherData, 'compact') || weatherIcon(3);
+  }).catch(() => {});
 }
 
 function renderCustomerAuth(){const params=routeQuery().params;const mode=params.get('mode')==='register'?'register':'login';const redirect=sanitizeCustomerRedirect(params.get('redirect')||'/account');const customer=getCustomerAccount();app.innerHTML=shell('Tu cuenta Xperiences',`<section class="auth-grid"><section class="panel auth-panel"><div class="panel-head"><h2>${mode==='register'?'Crear cuenta':'Acceder'}</h2></div>${customer?`<div class="save-hint">Sesión iniciada como <strong>${escapeHtml(customer.displayName||customer.email)}</strong>. <a href="#/account">Ir a mi cuenta</a></div>`:''}<form id="customer-auth-form" class="form-grid">${mode==='register'?`<label>Nombre completo<input name="displayName" autocomplete="name" required></label><label>Teléfono<input name="phone" autocomplete="tel"></label><label>Edad (opcional)<select name="ageRange"><option value="">Prefiero no indicarla</option><option value="18-25">18 – 25 años</option><option value="26-35">26 – 35 años</option><option value="36-50">36 – 50 años</option><option value="51+">51 años o más</option></select></label>`:''}<label>Correo electrónico<input name="email" type="email" autocomplete="email" required></label><label>Contraseña<input name="password" type="password" autocomplete="${mode==='register'?'new-password':'current-password'}" required></label>${mode==='register'?`<label class="full inline-check"><input type="checkbox" name="marketingOptIn"> Quiero recibir novedades y beneficios de fidelización</label>`:''}<div class="full button-row"><button type="submit">${mode==='register'?'Crear cuenta':'Entrar'}</button>${mode==='login'?`<button type="button" class="secondary" id="customer-reset-btn">Recuperar contraseña</button>`:''}</div><p class="muted small">Beneficios de la cuenta: reserva más rápida, historial de reservas y datos guardados para futuras compras.</p></form><div id="customer-auth-msg" class="save-hint"></div><p class="muted small">${mode==='register'?'¿Ya tienes cuenta?':'¿Aún no tienes cuenta?'} <a href="#/auth?mode=${mode==='register'?'login':'register'}&redirect=${encodeURIComponent(redirect)}">${mode==='register'?'Accede':'Crea tu cuenta'}</a></p></section></section>`,'public');const form=app.querySelector('#customer-auth-form');const msg=app.querySelector('#customer-auth-msg');form?.addEventListener('submit',async e=>{e.preventDefault();msg.textContent='';const f=e.currentTarget.elements;try{if(mode==='register'){await registerCustomerAccount({displayName:f.displayName.value,email:f.email.value,password:f.password.value,phone:f.phone.value,marketingOptIn:f.marketingOptIn.checked,ageRange:f.ageRange?.value||null});}else{await loginCustomerAccount(f.email.value,f.password.value);}setHashRoute(redirect);}catch(error){saveMsg(msg,mapAuthError(error),4500);}});app.querySelector('#customer-reset-btn')?.addEventListener('click',async()=>{const email=form?.elements?.email?.value||'';try{if(!String(email).trim())throw new Error('Indica tu correo para enviarte el enlace.');await sendCustomerReset(email);saveMsg(msg,'Te hemos enviado un correo para restablecer la contraseña.',4500);}catch(error){saveMsg(msg,mapAuthError(error),4500);}});}
@@ -545,7 +553,7 @@ function renderCompany(slug){
   function buildMapHtml(){
     if(!hasLocation)return company.city?`<p class="company-location-text">📍 ${escapeHtml(company.city)}</p>`:'';
     const dist=km!=null?`<span class="map-distance-pill">📍 ${kmLabel(km)}</span>`:'';
-    return `<div class="company-map-section">
+    return `<div id="weather-panel-slot" class="company-weather-slot"></div><div class="company-map-section">
       <div class="company-map-container" id="company-map"></div>
       <div class="company-map-actions">
         <a class="map-nav-btn map-nav-primary" href="${mapsUrl}" target="_blank" rel="noopener">
@@ -571,7 +579,11 @@ function renderCompany(slug){
     const parts=[];
     if(km!=null)parts.push(`<span class="hero-badge">📍 ${kmLabel(km)}</span>`);
     parts.push(`<span class="hero-badge">${sustainabilityLeaf(company.sustainabilityLevel)}</span>`);
-    parts.push(`<span class="hero-badge">${weatherIcon(company.weatherScore)}</span>`);
+    const liveW=getLiveWeather(company.id);
+    parts.push(liveW
+      ? `<span class="hero-badge weather-hero-live" id="weather-hero-badge">${weatherBadgeHtml(liveW,'compact')}</span>`
+      : `<span class="hero-badge" id="weather-hero-badge">${weatherIcon(company.weatherScore)}</span>`
+    );
     return parts.join('');
   }
 
@@ -693,6 +705,20 @@ function renderCompany(slug){
     btn.classList.add('exp-tab-active');
     paint(btn.dataset.exp);
   }));
+
+  // ── Tiempo real para esta empresa ──────────────────────────
+  // Fetch async → actualiza badge del hero + muestra panel completo
+  if(company.lat && company.lng){
+    fetchWeather(company.lat, company.lng).then(wd=>{
+      if(!wd)return;
+      // Actualizar badge compacto del hero
+      const heroBadge=app.querySelector('#weather-hero-badge');
+      if(heroBadge) heroBadge.outerHTML=`<span class="hero-badge weather-hero-live" id="weather-hero-badge">${weatherBadgeHtml(wd,'compact')}</span>`;
+      // Inyectar panel expandido antes del mapa (si existe el slot)
+      const slot=app.querySelector('#weather-panel-slot');
+      if(slot) slot.innerHTML=weatherBadgeHtml(wd,'expanded');
+    }).catch(()=>{});
+  }
 }
 
 

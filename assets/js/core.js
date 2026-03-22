@@ -839,6 +839,222 @@ function effectiveVisibility(company){
   return true;
 }
 // ══════════════════════════════════════════════════════════════
+// TIEMPO REAL — Open-Meteo (sin API key, CORS nativo)
+// API docs: https://open-meteo.com/en/docs
+// Cada empresa tiene lat/lng propios → tiempo exacto por zona
+// ══════════════════════════════════════════════════════════════
+
+// Cache en memoria: { "lat,lng": { data, fetchedAt } }
+const _weatherCache = {};
+const WEATHER_CACHE_TTL = 30 * 60 * 1000; // 30 min
+
+// Códigos WMO → descripción y tipo
+const WMO_CODES = {
+  0:  { label:'Despejado',      type:'sunny',    icon:'☀️' },
+  1:  { label:'Mayormente despejado', type:'sunny', icon:'🌤️' },
+  2:  { label:'Parcialmente nublado', type:'cloudy', icon:'⛅' },
+  3:  { label:'Cubierto',       type:'cloudy',   icon:'☁️' },
+  45: { label:'Niebla',         type:'fog',      icon:'🌫️' },
+  48: { label:'Niebla helada',  type:'fog',      icon:'🌫️' },
+  51: { label:'Llovizna ligera',type:'rain',     icon:'🌦️' },
+  53: { label:'Llovizna',       type:'rain',     icon:'🌦️' },
+  55: { label:'Llovizna intensa',type:'rain',    icon:'🌧️' },
+  61: { label:'Lluvia ligera',  type:'rain',     icon:'🌧️' },
+  63: { label:'Lluvia moderada',type:'rain',     icon:'🌧️' },
+  65: { label:'Lluvia intensa', type:'rain',     icon:'🌧️' },
+  71: { label:'Nieve ligera',   type:'snow',     icon:'🌨️' },
+  73: { label:'Nieve moderada', type:'snow',     icon:'❄️' },
+  75: { label:'Nieve intensa',  type:'snow',     icon:'❄️' },
+  77: { label:'Granizo',        type:'snow',     icon:'🌨️' },
+  80: { label:'Chubascos',      type:'rain',     icon:'🌦️' },
+  81: { label:'Chubascos moderados', type:'rain',icon:'🌧️' },
+  82: { label:'Chubascos fuertes',   type:'rain',icon:'⛈️' },
+  85: { label:'Nevadas',        type:'snow',     icon:'🌨️' },
+  86: { label:'Nevadas intensas',type:'snow',    icon:'❄️' },
+  95: { label:'Tormenta',       type:'storm',   icon:'⛈️' },
+  96: { label:'Tormenta con granizo', type:'storm', icon:'⛈️' },
+  99: { label:'Tormenta severa',type:'storm',   icon:'⛈️' }
+};
+
+function getWmo(code) {
+  return WMO_CODES[code] || { label:'Variable', type:'cloudy', icon:'🌡️' };
+}
+
+/** Clave de cache — agrupa por zona de ~1km (2 decimales) */
+function _weatherKey(lat, lng) {
+  return `${Number(lat).toFixed(2)},${Number(lng).toFixed(2)}`;
+}
+
+/**
+ * Fetcha tiempo real para unas coordenadas.
+ * Retorna { current, hourly, daily } o null si falla.
+ * Cachea 30 min por zona.
+ */
+async function fetchWeather(lat, lng) {
+  if (lat == null || lng == null) return null;
+  const key = _weatherKey(lat, lng);
+  const cached = _weatherCache[key];
+  if (cached && (Date.now() - cached.fetchedAt) < WEATHER_CACHE_TTL) {
+    return cached.data;
+  }
+
+  const params = new URLSearchParams({
+    latitude:  Number(lat).toFixed(4),
+    longitude: Number(lng).toFixed(4),
+    current:   'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation',
+    hourly:    'temperature_2m,weather_code,precipitation_probability',
+    daily:     'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max',
+    timezone:  'Europe/Madrid',
+    forecast_days: 3,
+    wind_speed_unit: 'kmh'
+  });
+
+  try {
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+
+    const cur = json.current || {};
+    const wmo = getWmo(cur.weather_code);
+    const data = {
+      temp:         Math.round(cur.temperature_2m ?? 0),
+      feelsLike:    Math.round(cur.apparent_temperature ?? 0),
+      humidity:     Math.round(cur.relative_humidity_2m ?? 0),
+      wind:         Math.round(cur.wind_speed_10m ?? 0),
+      precip:       cur.precipitation ?? 0,
+      code:         cur.weather_code ?? 0,
+      label:        wmo.label,
+      type:         wmo.type,   // sunny|cloudy|fog|rain|snow|storm
+      icon:         wmo.icon,
+      // Próximas 6 horas (para mostrar forecast mini)
+      next6h: (json.hourly?.time || []).slice(0, 6).map((t, i) => ({
+        hour:  new Date(t).getHours(),
+        temp:  Math.round((json.hourly.temperature_2m || [])[i] ?? 0),
+        code:  (json.hourly.weather_code || [])[i] ?? 0,
+        rain:  Math.round((json.hourly.precipitation_probability || [])[i] ?? 0),
+        icon:  getWmo((json.hourly.weather_code || [])[i]).icon
+      })),
+      // 3 días
+      daily: (json.daily?.time || []).slice(0, 3).map((t, i) => ({
+        date:     t,
+        code:     (json.daily.weather_code || [])[i] ?? 0,
+        max:      Math.round((json.daily.temperature_2m_max || [])[i] ?? 0),
+        min:      Math.round((json.daily.temperature_2m_min || [])[i] ?? 0),
+        precip:   Math.round((json.daily.precipitation_sum || [])[i] ?? 0),
+        wind:     Math.round((json.daily.wind_speed_10m_max || [])[i] ?? 0),
+        icon:     getWmo((json.daily.weather_code || [])[i]).icon,
+        label:    getWmo((json.daily.weather_code || [])[i]).label,
+        dayName:  ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][new Date(t).getDay()]
+      }))
+    };
+
+    _weatherCache[key] = { data, fetchedAt: Date.now() };
+    return data;
+  } catch (e) {
+    console.warn('[Weather] fetchWeather error:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Calcula un score 1-5 a partir del tiempo real para usarlo en el ranking.
+ * sunny=5, cloudy=3, fog=2, rain=1, snow=1, storm=1
+ */
+function weatherTypeToScore(type) {
+  return { sunny: 5, cloudy: 3, fog: 2, rain: 1, snow: 1, storm: 1 }[type] ?? 3;
+}
+
+/**
+ * Dado el tiempo real, devuelve si se debe hacer boost a indoor (+) o outdoor (+).
+ * Retorna { indoorBoost, outdoorBoost } — valores 0–4.
+ */
+function weatherBoosts(weatherData) {
+  if (!weatherData) return { indoorBoost: 0, outdoorBoost: 0 };
+  const t = weatherData.type;
+  if (t === 'rain' || t === 'storm') return { indoorBoost: 4, outdoorBoost: -3 };
+  if (t === 'snow')                  return { indoorBoost: 3, outdoorBoost: -2 };
+  if (t === 'fog')                   return { indoorBoost: 1, outdoorBoost: -1 };
+  if (t === 'sunny')                 return { indoorBoost: -1, outdoorBoost: 3 };
+  return { indoorBoost: 0, outdoorBoost: 0 }; // cloudy: neutral
+}
+
+/**
+ * Badge HTML de tiempo real para cards y fichas.
+ * Compacto para resultados, expandido para ficha de empresa.
+ */
+function weatherBadgeHtml(weatherData, mode = 'compact') {
+  if (!weatherData) return '';
+
+  if (mode === 'compact') {
+    return `<span class="weather-badge weather-badge-${weatherData.type}" title="${weatherData.label}">
+      <span class="weather-badge-icon">${weatherData.icon}</span>
+      <span class="weather-badge-temp">${weatherData.temp}°</span>
+    </span>`;
+  }
+
+  // Modo expandido — para ficha de empresa
+  const dailyHtml = weatherData.daily.map(d => `
+    <div class="weather-day">
+      <span class="weather-day-name">${d.dayName}</span>
+      <span class="weather-day-icon">${d.icon}</span>
+      <span class="weather-day-max">${d.max}°</span>
+      <span class="weather-day-min">${d.min}°</span>
+      ${d.precip > 0 ? `<span class="weather-day-rain">${d.precip}mm</span>` : ''}
+    </div>`).join('');
+
+  return `<div class="weather-panel">
+    <div class="weather-panel-main">
+      <span class="weather-main-icon">${weatherData.icon}</span>
+      <div class="weather-main-info">
+        <span class="weather-main-temp">${weatherData.temp}°C</span>
+        <span class="weather-main-label">${weatherData.label}</span>
+        <span class="weather-main-feels">Sensación ${weatherData.feelsLike}°C · Viento ${weatherData.wind} km/h</span>
+      </div>
+    </div>
+    <div class="weather-daily">${dailyHtml}</div>
+    <div class="weather-source">Meteorología en tiempo real · Open-Meteo</div>
+  </div>`;
+}
+
+// Cache de resultados de búsqueda enriquecidos con tiempo real
+const _liveWeatherResults = new Map(); // companyId → weatherData
+
+/**
+ * Enriquecer resultados de búsqueda con tiempo real (async, no bloquea render).
+ * Llama a cb(companyId, weatherData) por cada empresa procesada.
+ */
+async function enrichResultsWithWeather(results, cb) {
+  // Agrupar por zona para no hacer llamadas duplicadas a coordenadas idénticas
+  const seen = new Map(); // key → companyId primero visto
+  for (const r of results) {
+    const company = getCompanyById(r.companyId);
+    if (!company?.lat || !company?.lng) continue;
+    const key = _weatherKey(company.lat, company.lng);
+    if (!seen.has(key)) seen.set(key, []);
+    seen.get(key).push(r.companyId);
+  }
+
+  // Fetch en paralelo por zona
+  const fetches = [...seen.entries()].map(async ([key, companyIds]) => {
+    const [lat, lng] = key.split(',').map(Number);
+    const data = await fetchWeather(lat, lng);
+    if (data) {
+      companyIds.forEach(id => {
+        _liveWeatherResults.set(id, data);
+        if (typeof cb === 'function') cb(id, data);
+      });
+    }
+  });
+
+  await Promise.allSettled(fetches);
+}
+
+/** Obtener tiempo real cacheado para una empresa (sin esperar fetch) */
+function getLiveWeather(companyId) {
+  return _liveWeatherResults.get(companyId) || null;
+}
+
+// ══════════════════════════════════════════════════════════════
 // MOTOR DE BÚSQUEDA v5.1 — Prioridad diferencial
 // Principio: tokens específicos (caballo, quad) dominan sobre
 // tokens genéricos (paseo, plan). Las etiquetas manuales son
@@ -1128,7 +1344,18 @@ function runSearch(query,filters){
         if(filters.maxPrice&&minPrice>Number(filters.maxPrice))return;
       }
       const priorityBoost=priority*cfg.companyPriorityWeight*10;
-      const finalScore=sem*cfg.semanticWeight+climate*cfg.climateWeight+sustain*cfg.sustainabilityWeight+dist*cfg.distanceWeight+priorityBoost+learning.boost*cfg.learningWeight;
+      // ── Boost meteorológico en tiempo real ──────────────────
+      // Si tenemos tiempo real de la zona de la empresa,
+      // boosteamos indoor cuando llueve y outdoor cuando hace sol.
+      const liveW=getLiveWeather(company.id);
+      const wBoost=weatherBoosts(liveW);
+      const indoorOutdoor=exp.indoorOutdoor||'mixed';
+      const weatherRealBoost=
+        indoorOutdoor==='indoor'  ? wBoost.indoorBoost*cfg.climateWeight :
+        indoorOutdoor==='outdoor' ? wBoost.outdoorBoost*cfg.climateWeight : 0;
+      // Si hay tiempo real, reemplaza el weatherScore estático en el scoring
+      const climateReal = liveW ? weatherTypeToScore(liveW.type) : climate;
+      const finalScore=sem*cfg.semanticWeight+climateReal*cfg.climateWeight+sustain*cfg.sustainabilityWeight+dist*cfg.distanceWeight+priorityBoost+learning.boost*cfg.learningWeight+weatherRealBoost;
       candidates.push({company,experience:exp,minPrice,climate,sustain,priority,km,kind,semanticScore:sem,learningBoost:learning.boost,finalScore});
     });
   });
