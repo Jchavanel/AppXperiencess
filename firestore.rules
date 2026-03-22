@@ -106,6 +106,45 @@ service cloud.firestore {
       allow read, create, update, delete: if isOwner(userId);
     }
 
+
+    // ── Chat interno empresa ↔ cliente ──────────────────────────
+    match /chats/{chatId} {
+      // Participantes: el cliente (userId) o la empresa (companyId) del chat
+      function isChatParticipant() {
+        return signedIn() && (
+          request.auth.uid == resource.data.userId ||
+          hasCompanyAccess(resource.data.companyId) ||
+          isAdmin()
+        );
+      }
+      function isChatParticipantCreate() {
+        return signedIn() && (
+          request.auth.uid == request.resource.data.userId ||
+          hasCompanyAccess(request.resource.data.companyId) ||
+          isAdmin()
+        );
+      }
+
+      allow create: if isChatParticipantCreate();
+      allow read:   if isChatParticipant();
+      allow update: if isChatParticipant();
+      allow delete: if isAdmin();
+
+      // Mensajes: solo los participantes pueden leer y escribir
+      match /messages/{messageId} {
+        allow read:   if signedIn() && (
+          request.auth.uid == get(/databases/$(database)/documents/chats/$(chatId)).data.userId ||
+          hasCompanyAccess(get(/databases/$(database)/documents/chats/$(chatId)).data.companyId) ||
+          isAdmin()
+        );
+        allow create: if signedIn() && (
+          request.auth.uid == get(/databases/$(database)/documents/chats/$(chatId)).data.userId ||
+          hasCompanyAccess(get(/databases/$(database)/documents/chats/$(chatId)).data.companyId)
+        );
+        allow update, delete: if isAdmin();
+      }
+    }
+
     match /{document=**} { allow read, write: if false; }
   }
 }

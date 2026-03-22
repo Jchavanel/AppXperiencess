@@ -824,7 +824,7 @@ function shell(title,content,mode='public',opts={}){
   const nav=mode==='admin'
     ?`<nav class="nav-links"><a href="#/admin">Dashboard</a><a href="#/admin/companies">Empresas</a><a href="#/admin/analytics">Reservas y analítica</a><a href="#/admin/finance">Finanzas</a><a href="#/admin/search-quality">Calidad de búsqueda</a><a href="index.html#/">Ver buscador</a><a href="#/logout">Salir</a></nav>`
     :mode==='company'
-      ?`<nav class="nav-links nav-links-company"><a href="#/company-logout">Salir</a></nav>`
+      ?`<nav class="nav-links nav-links-company"><a href="#/company-admin">Mi panel</a><a href="#/company-chat" id="nav-chat-link">Mensajes<span class="nav-chat-badge" id="nav-chat-unread" style="display:none"></span></a><a href="#/company-logout">Salir</a></nav>`
       :`<nav class="nav-links nav-links-public">${publicExtra}${customerNav}${cartIcon}${companyAccessIcon}</nav>`;
   return `<div class="shell ${(mode==='admin'||mode==='company')?'shell-admin':''}"><header class="topbar ${mode==='public'?'topbar-public':''}"><div class="topbar-brand">${brand}<div class="subtitle">${title}</div></div>${nav}</header><main class="main">${content}</main></div>`;
 }
@@ -1751,4 +1751,190 @@ async function getAllCustomerFcmTokens() {
     console.warn('[FCM] getAllCustomerFcmTokens:', e.message);
     return [];
   }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  CHAT INTERNO — Mensajería empresa ↔ cliente  (v8.1)
+//  Usa Firestore onSnapshot para tiempo real sin servidor extra.
+//
+//  Estructura Firestore:
+//    chats/{chatId}               → metadatos de la conversación
+//    chats/{chatId}/messages/{id} → mensajes individuales
+//
+//  chatId = `${companyId}_${userId}` (una conv por par empresa-cliente)
+// ════════════════════════════════════════════════════════════════
+
+const CHAT_COLLECTION = 'chats';
+
+/** Genera el ID único de conversación entre empresa y cliente */
+function getChatId(companyId, userId) {
+  return `${companyId}_${userId}`;
+}
+
+/**
+ * Crea o recupera el documento raíz del chat.
+ * Si ya existe, lo devuelve tal cual (no sobreescribe).
+ */
+async function ensureChat(companyId, userId) {
+  if (!_db) throw new Error('DB_NOT_READY');
+  const account = getCustomerAccount();
+  if (!account) throw new Error('AUTH_REQUIRED');
+
+  const chatId = getChatId(companyId, userId);
+  const company = getCompanyById(companyId);
+  const ref = _db.doc(`${CHAT_COLLECTION}/${chatId}`);
+  const snap = await ref.get();
+
+  if (!snap.exists) {
+    const now = nowIso();
+    await ref.set({
+      chatId,
+      companyId,
+      companyName: company?.name || '',
+      userId,
+      userName: account.displayName || account.email || '',
+      userEmail: account.email || '',
+      createdAt: now,
+      updatedAt: now,
+      lastMessage: '',
+      lastMessageAt: now,
+      lastSenderId: '',
+      unreadCompany: 0,   // mensajes del cliente sin leer por la empresa
+      unreadClient: 0     // mensajes de la empresa sin leer por el cliente
+    });
+  }
+  return chatId;
+}
+
+/**
+ * Envía un mensaje.
+ * senderRole: 'customer' | 'company'
+ */
+async function sendChatMessage(chatId, text, senderRole) {
+  if (!_db) throw new Error('DB_NOT_READY');
+  const account = getCustomerAccount();
+  if (!account) throw new Error('AUTH_REQUIRED');
+
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 2000) throw new Error('Mensaje demasiado largo (máx 2000 caracteres).');
+
+  const msgId = uid('msg');
+  const now = nowIso();
+
+  const msg = {
+    id: msgId,
+    chatId,
+    text: trimmed,
+    senderId: account.uid,
+    senderRole,          // 'customer' | 'company'
+    senderName: account.displayName || account.email || '',
+    createdAt: now,
+    read: false
+  };
+
+  const batch = _db.batch();
+
+  // Escribir mensaje en subcollección
+  batch.set(_db.doc(`${CHAT_COLLECTION}/${chatId}/messages/${msgId}`), msg);
+
+  // Actualizar metadatos del chat (lastMessage + contador no leído)
+  const unreadField = senderRole === 'customer' ? 'unreadCompany' : 'unreadClient';
+  batch.update(_db.doc(`${CHAT_COLLECTION}/${chatId}`), {
+    lastMessage: trimmed.length > 80 ? trimmed.slice(0, 80) + '…' : trimmed,
+    lastMessageAt: now,
+    lastSenderId: account.uid,
+    updatedAt: now,
+    [unreadField]: firebase.firestore.FieldValue.increment(1)
+  });
+
+  await batch.commit();
+  return msg;
+}
+
+/**
+ * Suscribirse a mensajes en tiempo real.
+ * Devuelve función de unsuscribe.
+ */
+function listenChatMessages(chatId, onMessages) {
+  if (!_db) return () => {};
+  return _db
+    .collection(`${CHAT_COLLECTION}/${chatId}/messages`)
+    .orderBy('createdAt', 'asc')
+    .onSnapshot(snap => {
+      const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      onMessages(msgs);
+    }, err => console.warn('[Chat] listenChatMessages:', err));
+}
+
+/**
+ * Suscribirse a todas las conversaciones de una empresa.
+ * Devuelve función de unsuscribe.
+ */
+function listenCompanyChats(companyId, onChats) {
+  if (!_db) return () => {};
+  return _db
+    .collection(CHAT_COLLECTION)
+    .where('companyId', '==', companyId)
+    .orderBy('lastMessageAt', 'desc')
+    .onSnapshot(snap => {
+      const chats = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      onChats(chats);
+    }, err => console.warn('[Chat] listenCompanyChats:', err));
+}
+
+/**
+ * Suscribirse a todas las conversaciones de un cliente.
+ * Devuelve función de unsuscribe.
+ */
+function listenUserChats(userId, onChats) {
+  if (!_db) return () => {};
+  return _db
+    .collection(CHAT_COLLECTION)
+    .where('userId', '==', userId)
+    .orderBy('lastMessageAt', 'desc')
+    .onSnapshot(snap => {
+      const chats = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      onChats(chats);
+    }, err => console.warn('[Chat] listenUserChats:', err));
+}
+
+/**
+ * Marcar mensajes como leídos y resetear contador no leído.
+ * role: 'customer' | 'company' (quién está leyendo)
+ */
+async function markChatRead(chatId, role) {
+  if (!_db) return;
+  const unreadField = role === 'customer' ? 'unreadClient' : 'unreadCompany';
+  try {
+    await _db.doc(`${CHAT_COLLECTION}/${chatId}`).update({
+      [unreadField]: 0
+    });
+  } catch (e) {
+    console.warn('[Chat] markChatRead:', e.message);
+  }
+}
+
+/** Total mensajes no leídos para el cliente (todas sus conversaciones) */
+async function getTotalUnreadForUser(userId) {
+  if (!_db || !userId) return 0;
+  try {
+    const snap = await _db.collection(CHAT_COLLECTION)
+      .where('userId', '==', userId)
+      .where('unreadClient', '>', 0)
+      .get();
+    return snap.docs.reduce((acc, d) => acc + (d.data().unreadClient || 0), 0);
+  } catch (e) { return 0; }
+}
+
+/** Total mensajes no leídos para una empresa */
+async function getTotalUnreadForCompany(companyId) {
+  if (!_db || !companyId) return 0;
+  try {
+    const snap = await _db.collection(CHAT_COLLECTION)
+      .where('companyId', '==', companyId)
+      .where('unreadCompany', '>', 0)
+      .get();
+    return snap.docs.reduce((acc, d) => acc + (d.data().unreadCompany || 0), 0);
+  } catch (e) { return 0; }
 }

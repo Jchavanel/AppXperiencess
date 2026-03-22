@@ -566,6 +566,14 @@ function renderCompany(slug){
         </a>
         ${dist}
       </div>
+    </div>
+    <div class="company-chat-action">
+      <button class="company-chat-btn" id="btn-open-chat">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        Enviar mensaje a la empresa
+      </button>
     </div>`;
   }
 
@@ -706,6 +714,20 @@ function renderCompany(slug){
     paint(btn.dataset.exp);
   }));
 
+  // ── Chat: abrir ventana de mensajes ────────────────────────
+  const chatBtn = app.querySelector('#btn-open-chat');
+  if (chatBtn) {
+    chatBtn.addEventListener('click', () => {
+      const account = getCustomerAccount();
+      if (!account) {
+        // Redirigir al login y volver
+        setHashRoute(`/auth?mode=login&redirect=${encodeURIComponent(location.hash)}`);
+        return;
+      }
+      openCustomerChat(company.id, company.name);
+    });
+  }
+
   // ── Tiempo real para esta empresa ──────────────────────────
   // Fetch async → actualiza badge del hero + muestra panel completo
   if(company.lat && company.lng){
@@ -721,6 +743,134 @@ function renderCompany(slug){
   }
 }
 
+
+
+// ════════════════════════════════════════════════════════════════
+//  Chat cliente — ventana flotante
+// ════════════════════════════════════════════════════════════════
+let _chatUnsub = null; // listener activo de mensajes
+
+function openCustomerChat(companyId, companyName) {
+  // Quitar chat previo si existe
+  document.getElementById('xp-chat-modal')?.remove();
+  if (_chatUnsub) { _chatUnsub(); _chatUnsub = null; }
+
+  const account = getCustomerAccount();
+  if (!account) return;
+
+  const chatId = getChatId(companyId, account.uid);
+
+  const modalHtml = `
+  <div id="xp-chat-modal" class="xp-chat-modal" role="dialog" aria-modal="true" aria-label="Chat con ${escapeHtml(companyName)}">
+    <div class="xp-chat-box">
+      <div class="xp-chat-header">
+        <div class="xp-chat-header-info">
+          <span class="xp-chat-avatar">${escapeHtml((companyName||'?')[0].toUpperCase())}</span>
+          <div>
+            <strong class="xp-chat-name">${escapeHtml(companyName)}</strong>
+            <span class="xp-chat-status" id="chat-status">Conectando…</span>
+          </div>
+        </div>
+        <button class="xp-chat-close" id="xp-chat-close" aria-label="Cerrar chat">✕</button>
+      </div>
+      <div class="xp-chat-messages" id="xp-chat-messages">
+        <div class="xp-chat-loading">Cargando mensajes…</div>
+      </div>
+      <form class="xp-chat-input-row" id="xp-chat-form" autocomplete="off">
+        <input type="text" class="xp-chat-input" id="xp-chat-input"
+          placeholder="Escribe un mensaje…" maxlength="2000" required>
+        <button type="submit" class="xp-chat-send" aria-label="Enviar">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </form>
+    </div>
+  </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+  const modal   = document.getElementById('xp-chat-modal');
+  const msgsEl  = document.getElementById('xp-chat-messages');
+  const form    = document.getElementById('xp-chat-form');
+  const input   = document.getElementById('xp-chat-input');
+  const status  = document.getElementById('chat-status');
+
+  // ── Cerrar ────────────────────────────────────────────────
+  function closeChat() {
+    if (_chatUnsub) { _chatUnsub(); _chatUnsub = null; }
+    modal.classList.add('xp-chat-hiding');
+    setTimeout(() => modal.remove(), 280);
+  }
+  document.getElementById('xp-chat-close').addEventListener('click', closeChat);
+  document.addEventListener('keydown', function onKey(e) {
+    if (e.key === 'Escape') { closeChat(); document.removeEventListener('keydown', onKey); }
+  });
+
+  // ── Renderizar un mensaje ─────────────────────────────────
+  function renderMsg(msg, isMe) {
+    const time = new Date(msg.createdAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="xp-chat-msg ${isMe ? 'mine' : 'theirs'}">
+      <div class="xp-chat-bubble">${escapeHtml(msg.text)}</div>
+      <span class="xp-chat-time">${time}</span>
+    </div>`;
+  }
+
+  // ── Scroll al fondo ───────────────────────────────────────
+  function scrollBottom() {
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  }
+
+  // ── Inicializar chat (crear si no existe) y escuchar ─────
+  ensureChat(companyId, account.uid)
+    .then(() => {
+      status.textContent = 'En línea';
+      status.style.color = 'rgba(100,220,180,.8)';
+
+      // Marcar como leído al abrir
+      markChatRead(chatId, 'customer').catch(() => {});
+
+      // Escuchar mensajes en tiempo real
+      _chatUnsub = listenChatMessages(chatId, msgs => {
+        if (!msgs.length) {
+          msgsEl.innerHTML = '<div class="xp-chat-empty">Aún no hay mensajes. ¡Escribe el primero!</div>';
+          return;
+        }
+        const wasAtBottom = msgsEl.scrollHeight - msgsEl.scrollTop <= msgsEl.clientHeight + 60;
+        msgsEl.innerHTML = msgs.map(m => renderMsg(m, m.senderId === account.uid)).join('');
+        if (wasAtBottom) scrollBottom();
+        // Marcar leídos
+        markChatRead(chatId, 'customer').catch(() => {});
+      });
+    })
+    .catch(err => {
+      msgsEl.innerHTML = `<div class="xp-chat-error">Error al conectar: ${escapeHtml(err.message)}</div>`;
+    });
+
+  // ── Enviar mensaje ────────────────────────────────────────
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    const sendBtn = form.querySelector('.xp-chat-send');
+    sendBtn.disabled = true;
+    input.value = '';
+    try {
+      await sendChatMessage(chatId, text, 'customer');
+      scrollBottom();
+    } catch (err) {
+      input.value = text; // restaurar si falla
+      alert('No se pudo enviar: ' + err.message);
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  });
+
+  // Animación de entrada
+  requestAnimationFrame(() => modal.classList.add('xp-chat-visible'));
+  setTimeout(() => input.focus(), 300);
+}
 
 
 // ── Enrutador público ─────────────────────────────────────────

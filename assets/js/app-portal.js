@@ -194,6 +194,14 @@ function renderCompanyAdmin(){
     if(btn) btn.addEventListener('click',e=>{e.preventDefault();renderPlanesModal(company);});
   });
 
+  // ── Badge de mensajes no leídos en el nav ──────────────────
+  getTotalUnreadForCompany(companyId).then(total => {
+    const badge = document.getElementById('nav-chat-unread');
+    if (!badge) return;
+    badge.style.display = total > 0 ? 'inline-flex' : 'none';
+    badge.textContent = total > 9 ? '9+' : String(total || '');
+  }).catch(() => {});
+
   // ── Tiempo real para el portal empresa ─────────────────────
   if(company.lat && company.lng){
     fetchWeather(company.lat, company.lng).then(wd=>{
@@ -406,6 +414,7 @@ function render(){
     }
     if(route.path==='/'||route.path===''||route.path==='/company-login')return renderCompanyLogin();
     if(route.path==='/company-admin')return renderCompanyAdmin();
+    if(route.path==='/company-chat')return renderCompanyChat();
     app.innerHTML=`<div class="error-screen"><h1>Página no encontrada</h1><a href="portal.html">Volver al portal</a></div>`;
   }catch(err){
     console.error('[XP] portal render:',err);
@@ -585,6 +594,183 @@ function renderPlanesModal(company){
 
   // Animar entrada
   requestAnimationFrame(() => overlay.classList.add('xp-modal-visible'));
+}
+
+
+// ════════════════════════════════════════════════════════════════
+//  Chat empresa — lista de conversaciones + vista de hilo
+// ════════════════════════════════════════════════════════════════
+let _portalChatUnsub = null;
+let _portalMsgUnsub  = null;
+
+function renderCompanyChat(openChatId) {
+  const companyId = requireCompanySession();
+  if (!companyId) return;
+  const company = getCompanyById(companyId);
+
+  if (_portalChatUnsub) { _portalChatUnsub(); _portalChatUnsub = null; }
+  if (_portalMsgUnsub)  { _portalMsgUnsub();  _portalMsgUnsub  = null; }
+
+  app.innerHTML = shell('Mensajes', `
+    <div class="company-chat-layout">
+      <aside class="company-chat-sidebar" id="chat-sidebar">
+        <div class="company-chat-sidebar-head">
+          <h2>Mensajes</h2>
+          <span class="muted small" id="chat-conv-count">Cargando…</span>
+        </div>
+        <div class="company-chat-list" id="chat-conv-list">
+          <div class="xp-loading"><div class="xp-spinner"></div></div>
+        </div>
+      </aside>
+      <section class="company-chat-thread" id="chat-thread">
+        <div class="company-chat-empty-state">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.3">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <p>Selecciona una conversación</p>
+        </div>
+      </section>
+    </div>
+  `, 'company');
+
+  const listEl   = document.getElementById('chat-conv-list');
+  const countEl  = document.getElementById('chat-conv-count');
+  const threadEl = document.getElementById('chat-thread');
+  let _activeChatId = openChatId || null;
+
+  // ── Renderizar hilo de mensajes ──────────────────────────
+  function openThread(chatMeta) {
+    _activeChatId = chatMeta.chatId;
+    if (_portalMsgUnsub) { _portalMsgUnsub(); _portalMsgUnsub = null; }
+
+    // Marcar conversación activa en sidebar
+    listEl.querySelectorAll('.chat-conv-item').forEach(el =>
+      el.classList.toggle('active', el.dataset.chatId === chatMeta.chatId)
+    );
+
+    threadEl.innerHTML = `
+      <div class="company-chat-thread-header">
+        <span class="xp-chat-avatar">${escapeHtml((chatMeta.userName||'?')[0].toUpperCase())}</span>
+        <div>
+          <strong>${escapeHtml(chatMeta.userName || chatMeta.userEmail || 'Cliente')}</strong>
+          <span class="muted small">${escapeHtml(chatMeta.userEmail || '')}</span>
+        </div>
+      </div>
+      <div class="xp-chat-messages company-thread-messages" id="portal-chat-msgs">
+        <div class="xp-chat-loading">Cargando mensajes…</div>
+      </div>
+      <form class="xp-chat-input-row" id="portal-chat-form" autocomplete="off">
+        <input type="text" class="xp-chat-input" id="portal-chat-input"
+          placeholder="Responder…" maxlength="2000" required>
+        <button type="submit" class="xp-chat-send" aria-label="Enviar">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </form>`;
+
+    const msgsEl  = document.getElementById('portal-chat-msgs');
+    const form    = document.getElementById('portal-chat-form');
+    const input   = document.getElementById('portal-chat-input');
+    const account = getCustomerAccount();
+
+    function scrollBottom() { msgsEl.scrollTop = msgsEl.scrollHeight; }
+
+    // Escuchar mensajes en tiempo real
+    _portalMsgUnsub = listenChatMessages(chatMeta.chatId, msgs => {
+      if (!msgs.length) {
+        msgsEl.innerHTML = '<div class="xp-chat-empty">Sin mensajes aún.</div>';
+        return;
+      }
+      const wasAtBottom = msgsEl.scrollHeight - msgsEl.scrollTop <= msgsEl.clientHeight + 60;
+      msgsEl.innerHTML = msgs.map(m => {
+        const isMe = m.senderRole === 'company';
+        const time = new Date(m.createdAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        return `<div class="xp-chat-msg ${isMe ? 'mine' : 'theirs'}">
+          <div class="xp-chat-bubble">${escapeHtml(m.text)}</div>
+          <span class="xp-chat-time">${isMe ? '' : escapeHtml(m.senderName||'Cliente') + ' · '}${time}</span>
+        </div>`;
+      }).join('');
+      if (wasAtBottom) scrollBottom();
+      markChatRead(chatMeta.chatId, 'company').catch(() => {});
+    });
+
+    // Enviar
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      const btn = form.querySelector('.xp-chat-send');
+      btn.disabled = true;
+      input.value = '';
+      try {
+        await sendChatMessage(chatMeta.chatId, text, 'company');
+        scrollBottom();
+      } catch (err) {
+        input.value = text;
+        alert('No se pudo enviar: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        input.focus();
+      }
+    });
+
+    markChatRead(chatMeta.chatId, 'company').catch(() => {});
+    setTimeout(() => input.focus(), 100);
+  }
+
+  // ── Escuchar lista de conversaciones en tiempo real ──────
+  _portalChatUnsub = listenCompanyChats(companyId, chats => {
+    const total = chats.reduce((a, c) => a + (c.unreadCompany || 0), 0);
+    countEl.textContent = `${chats.length} conversación${chats.length !== 1 ? 'es' : ''}`;
+
+    // Actualizar badge nav
+    const badge = document.getElementById('nav-chat-unread');
+    if (badge) {
+      badge.style.display = total > 0 ? 'inline-flex' : 'none';
+      badge.textContent = total > 9 ? '9+' : String(total);
+    }
+
+    if (!chats.length) {
+      listEl.innerHTML = '<div class="xp-chat-empty" style="padding:1.5rem">Ningún cliente te ha escrito todavía.</div>';
+      return;
+    }
+
+    listEl.innerHTML = chats.map(ch => {
+      const unread = ch.unreadCompany || 0;
+      const ts = ch.lastMessageAt
+        ? new Date(ch.lastMessageAt).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : '';
+      return `<div class="chat-conv-item ${ch.chatId === _activeChatId ? 'active' : ''}"
+                   data-chat-id="${escapeHtml(ch.chatId)}">
+        <span class="xp-chat-avatar sm">${escapeHtml((ch.userName||'?')[0].toUpperCase())}</span>
+        <div class="chat-conv-body">
+          <div class="chat-conv-top">
+            <strong>${escapeHtml(ch.userName || ch.userEmail || 'Cliente')}</strong>
+            <span class="chat-conv-time">${ts}</span>
+          </div>
+          <div class="chat-conv-preview">${escapeHtml(ch.lastMessage || '…')}</div>
+        </div>
+        ${unread > 0 ? `<span class="chat-unread-dot">${unread}</span>` : ''}
+      </div>`;
+    }).join('');
+
+    // Listeners en cada conversación
+    listEl.querySelectorAll('.chat-conv-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const meta = chats.find(ch => ch.chatId === el.dataset.chatId);
+        if (meta) openThread(meta);
+      });
+    });
+
+    // Abrir la primera o la que estaba abierta
+    if (_activeChatId) {
+      const meta = chats.find(ch => ch.chatId === _activeChatId);
+      if (meta) openThread(meta);
+    } else if (chats.length) {
+      openThread(chats[0]);
+    }
+  });
 }
 
 

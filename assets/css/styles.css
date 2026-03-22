@@ -1012,3 +1012,197 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border:1px solid rgba(80,140,220,.25);
   margin-left:5px;white-space:nowrap;vertical-align:middle;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Chat interno empresa ↔ cliente  (v8.1)
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Botón "Enviar mensaje" en ficha empresa ────────────────── */
+.company-chat-action{margin-top:.75rem;text-align:center}
+.company-chat-btn{
+  display:inline-flex;align-items:center;gap:.5rem;
+  padding:.65rem 1.25rem;border-radius:12px;border:none;cursor:pointer;
+  background:rgba(77,163,255,.15);border:1px solid rgba(77,163,255,.3);
+  color:rgba(180,220,255,.9);font-size:.88rem;font-weight:500;
+  transition:background .15s,border-color .15s;
+}
+.company-chat-btn:hover{background:rgba(77,163,255,.25);border-color:rgba(77,163,255,.5)}
+
+/* ── Badge nav mensajes ─────────────────────────────────────── */
+.nav-chat-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:16px;height:16px;padding:0 4px;border-radius:999px;
+  background:rgba(226,75,74,.9);color:#fff;font-size:10px;font-weight:700;
+  margin-left:4px;vertical-align:middle;line-height:1;
+}
+
+/* ── Modal chat flotante (cliente) ─────────────────────────── */
+.xp-chat-modal{
+  position:fixed;bottom:1.5rem;right:1.5rem;z-index:9001;
+  width:360px;max-width:calc(100vw - 2rem);
+  opacity:0;transition:opacity .25s ease;
+}
+@media(max-width:480px){
+  .xp-chat-modal{bottom:0;right:0;width:100%;max-width:100%;border-radius:0}
+  .xp-chat-box{border-radius:18px 18px 0 0}
+}
+.xp-chat-modal.xp-chat-visible{opacity:1}
+.xp-chat-modal.xp-chat-hiding{opacity:0;transform:translateY(12px)}
+
+.xp-chat-box{
+  background:#0c1e38;
+  border:1px solid rgba(77,163,255,.28);
+  border-radius:18px;
+  box-shadow:0 24px 64px rgba(2,12,28,.7);
+  display:flex;flex-direction:column;
+  max-height:520px;overflow:hidden;
+}
+
+/* ── Header del chat ────────────────────────────────────────── */
+.xp-chat-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:.85rem 1rem;
+  border-bottom:1px solid rgba(149,198,255,.12);
+  flex-shrink:0;
+}
+.xp-chat-header-info{display:flex;align-items:center;gap:.65rem}
+.xp-chat-name{display:block;font-size:.9rem;font-weight:600;color:#f4f8ff}
+.xp-chat-status{font-size:.72rem;color:rgba(140,185,230,.55)}
+.xp-chat-close{
+  width:28px;height:28px;border-radius:50%;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
+  color:rgba(200,220,255,.6);font-size:15px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s,color .15s;padding:0;
+}
+.xp-chat-close:hover{background:rgba(226,75,74,.3);color:#fff}
+
+/* ── Avatar ─────────────────────────────────────────────────── */
+.xp-chat-avatar{
+  width:36px;height:36px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#1677ff,#4da3ff);
+  color:#fff;font-size:.88rem;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+}
+.xp-chat-avatar.sm{width:30px;height:30px;font-size:.78rem}
+
+/* ── Área de mensajes ───────────────────────────────────────── */
+.xp-chat-messages{
+  flex:1;overflow-y:auto;
+  padding:.75rem 1rem;
+  display:flex;flex-direction:column;gap:.5rem;
+  min-height:200px;
+  scrollbar-width:thin;scrollbar-color:rgba(77,163,255,.2) transparent;
+}
+.xp-chat-loading{color:rgba(140,185,230,.5);font-size:.82rem;text-align:center;padding:1rem}
+.xp-chat-empty{color:rgba(140,185,230,.45);font-size:.82rem;text-align:center;padding:1.5rem}
+.xp-chat-error{color:rgba(240,130,130,.8);font-size:.82rem;text-align:center;padding:1rem}
+
+/* ── Burbujas de mensaje ────────────────────────────────────── */
+.xp-chat-msg{display:flex;flex-direction:column;max-width:82%}
+.xp-chat-msg.mine{align-self:flex-end;align-items:flex-end}
+.xp-chat-msg.theirs{align-self:flex-start;align-items:flex-start}
+
+.xp-chat-bubble{
+  padding:.55rem .85rem;border-radius:14px;
+  font-size:.86rem;line-height:1.45;word-break:break-word;
+}
+.mine .xp-chat-bubble{
+  background:linear-gradient(135deg,#1d6fd4,#1255a8);
+  color:#fff;border-bottom-right-radius:4px;
+}
+.theirs .xp-chat-bubble{
+  background:rgba(255,255,255,.08);border:1px solid rgba(149,198,255,.15);
+  color:rgba(220,240,255,.9);border-bottom-left-radius:4px;
+}
+.xp-chat-time{font-size:.68rem;color:rgba(130,175,230,.45);margin-top:2px;padding:0 2px}
+
+/* ── Input de texto ─────────────────────────────────────────── */
+.xp-chat-input-row{
+  display:flex;align-items:center;gap:.5rem;
+  padding:.7rem 1rem;border-top:1px solid rgba(149,198,255,.12);
+  flex-shrink:0;
+}
+.xp-chat-input{
+  flex:1;height:38px;padding:0 .75rem;
+  border-radius:10px;border:1px solid rgba(149,198,255,.2);
+  background:rgba(255,255,255,.06);
+  color:rgba(220,240,255,.9);font-size:.875rem;font-family:inherit;
+  outline:none;transition:border-color .15s;
+  -webkit-text-fill-color:rgba(220,240,255,.9);
+  caret-color:#4da3ff;
+}
+.xp-chat-input:focus{border-color:rgba(77,163,255,.5);background:rgba(255,255,255,.09)}
+.xp-chat-input::placeholder{color:rgba(130,175,230,.35)}
+.xp-chat-send{
+  width:38px;height:38px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,#4da3ff,#1677ff);
+  border:none;cursor:pointer;color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  transition:opacity .15s,transform .1s;
+  box-shadow:0 4px 12px rgba(22,119,255,.3);
+}
+.xp-chat-send:hover{opacity:.9}
+.xp-chat-send:active{transform:scale(.94)}
+.xp-chat-send:disabled{opacity:.4;cursor:default;transform:none}
+
+/* ══════════════════════════════════════════════════════════════
+   Chat portal empresa — layout de dos columnas
+   ══════════════════════════════════════════════════════════════ */
+.company-chat-layout{
+  display:grid;grid-template-columns:300px 1fr;
+  gap:0;height:calc(100vh - 80px);
+  border-radius:16px;overflow:hidden;
+  border:1px solid rgba(149,198,255,.12);
+  background:#0c1e38;
+}
+@media(max-width:700px){
+  .company-chat-layout{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+}
+
+/* ── Sidebar (lista de convs) ───────────────────────────────── */
+.company-chat-sidebar{
+  border-right:1px solid rgba(149,198,255,.12);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.company-chat-sidebar-head{
+  padding:.9rem 1rem;border-bottom:1px solid rgba(149,198,255,.1);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.company-chat-sidebar-head h2{font-size:1rem;font-weight:600;color:#f4f8ff;margin:0}
+.company-chat-list{flex:1;overflow-y:auto;scrollbar-width:thin}
+
+/* ── Item de conversación ───────────────────────────────────── */
+.chat-conv-item{
+  display:flex;align-items:center;gap:.65rem;
+  padding:.75rem 1rem;cursor:pointer;border-bottom:1px solid rgba(149,198,255,.07);
+  transition:background .12s;position:relative;
+}
+.chat-conv-item:hover{background:rgba(77,163,255,.07)}
+.chat-conv-item.active{background:rgba(77,163,255,.12);border-left:2px solid rgba(77,163,255,.6)}
+.chat-conv-body{flex:1;min-width:0}
+.chat-conv-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+.chat-conv-top strong{font-size:.85rem;color:#f4f8ff;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+.chat-conv-time{font-size:.68rem;color:rgba(130,175,230,.4);flex-shrink:0}
+.chat-conv-preview{font-size:.78rem;color:rgba(140,185,230,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-unread-dot{
+  min-width:18px;height:18px;border-radius:999px;
+  background:rgba(77,163,255,.9);color:#fff;
+  font-size:.68rem;font-weight:700;padding:0 4px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+
+/* ── Hilo de mensajes (empresa) ─────────────────────────────── */
+.company-chat-thread{display:flex;flex-direction:column;overflow:hidden}
+.company-chat-thread-header{
+  display:flex;align-items:center;gap:.65rem;
+  padding:.85rem 1.1rem;border-bottom:1px solid rgba(149,198,255,.1);
+  flex-shrink:0;
+}
+.company-chat-thread-header strong{display:block;font-size:.9rem;color:#f4f8ff}
+.company-thread-messages{flex:1;overflow-y:auto;padding:.75rem 1rem;display:flex;flex-direction:column;gap:.5rem;scrollbar-width:thin}
+.company-chat-empty-state{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:.75rem;color:rgba(140,185,230,.45);
+  font-size:.88rem;
+}
